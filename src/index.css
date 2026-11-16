@@ -1,0 +1,260 @@
+@import "tailwindcss";
+@import "react-day-picker/style.css";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --color-navy: #071833;
+  --color-navy-2: #0c2344;
+  --color-ink: #102033;
+  --color-muted: #64748b;
+  --color-gold: #ffc400;
+  --color-gold-2: #e6b000;
+  --color-canvas: #f4f7fb;
+  --color-line: #e6ebf2;
+  --color-success: #16a34a;
+  --color-warning: #f59e0b;
+  --color-danger: #ef4444;
+  --color-info: #2563eb;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  color: var(--color-ink);
+  background: #ffffff;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #c5d0de transparent;
+}
+
+.rdp-root {
+  --rdp-accent-color: #102033;
+  --rdp-accent-background-color: #fff4cc;
+}
+
+.fc {
+  --fc-border-color: #e6ebf2;
+  --fc-button-bg-color: #071833;
+  --fc-button-border-color: #071833;
+  --fc-button-hover-bg-color: #0c2344;
+  --fc-button-hover-border-color: #0c2344;
+  --fc-button-active-bg-color: #ffc400;
+  --fc-button-active-border-color: #ffc400;
+  --fc-today-bg-color: #fff8dc;
+  --fc-page-bg-color: #ffffff;
+  --fc-neutral-bg-color: #f8fafc;
+}
+
+.fc .fc-button {
+  text-transform: capitalize;
+  font-weight: 600;
+  border-radius: 10px;
+}
+
+.fc .fc-button-primary:not(:disabled).fc-button-active,
+.fc .fc-button-primary:not(:disabled):active {
+  background: #ffc400;
+  border-color: #ffc400;
+  color: #102033;
+}
+
+/* Month-view multi-day bars were clipped at cell edges */
+.dm-fc .fc-dayGridMonth-view .fc-scrollgrid-section-body td {
+  overflow: visible;
+}
+
+.dm-fc .fc-dayGridMonth-view .fc-daygrid-day-frame {
+  overflow: visible;
+}
+
+.dm-fc .fc-dayGridMonth-view .fc-daygrid-day-events {
+  margin: 2px 3px 0;
+  overflow: visible;
+}
+
+.dm-fc .fc-daygrid-block-event {
+  border-radius: 6px;
+  padding: 1px 4px;
+}
+
+.dm-fc .fc-daygrid-block-event .fc-event-main {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Calendar on dashboards — overrides global .fc navy theme */
+.dm-fc--google .fc {
+  --fc-border-color: #dadce0;
+  --fc-button-bg-color: #ffffff;
+  --fc-button-border-color: #dadce0;
+  --fc-button-text-color: #1f1f1f;
+  --fc-button-hover-bg-color: #f1f3f4;
+  --fc-button-hover-border-color: #bdc1c6;
+  --fc-button-active-bg-color: #e8f0fe;
+  --fc-button-active-border-color: #d2e3fc;
+  --fc-today-bg-color: #ffffff;
+  --fc-page-bg-color: #ffffff;
+  --fc-neutral-bg-color: #ffffff;
+  --fc-event-border-color: transparent;
+  --fc-now-indicator-color: #ea4335;
+}
+
+.dm-fc--google .fc .fc-scrollgrid,
+.dm-fc--google .fc .fc-scrollgrid-section > * {
+  border-color: #dadce0;
+}
+
+.dm-fc--google .fc .fc-toolbar-title {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #202124;
+}
+
+.dm-fc--google .fc .fc-button {
+  box-shadow: none;
+  font-weight: 600;
+  padding: 0.4rem 0.85rem;
+  text-transform: capitalize;
+}
+
+.dm-fc--google .fc .fc-button-primary {
+  background: #ffffff;
+  border-color: #dadce0;
+  color: #3c4043;
+}
+
+.dm-fc--google .fc .fc-button-primary:hover {
+  background: #f1f3f4;
+  border-color: #bdc1c6;
+  color: #202124;
+}
+
+.dm-fc--google .fc .fc-button-primary:not(:disabled).fc-button-active,
+.dm-fc--google .fc .fc-button-primary:not(:disabled):active {
+  background: #e8f0fe;
+  border-color: #d2e3fc;
+  color: #1967d2;
+}
+
+.dm-fc--google .fc .fc-button-primary:disabled {
+  opacity: 0.45;
+}
+
+.dm-fc--google .fc .fc-col-header-cell {
+  background: #f8f9fa;
+}
+
+.dm-fc--google .fc .fc-col-header-cell-cushion {
+  color: #5f6368;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 10px 4px;
+  text-transform: uppercase;
+}
+
+.dm-fc--google .fc .fc-daygrid-day-top {
+  flex-direction: row;
+  justify-content: center;
+  padding-top: 6px;
+}
+
+.dm-fc--google .fc .fc-daygrid-day-number {
+  color: #202124;
+  float: none;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  line-height: 1;
+  padding: 6px;
+  text-decoration: none;
+}
+
+.dm-fc--google .fc .fc-day-other .fc-daygrid-day-number {
+  color: #9aa0a6;
+}
+
+.dm-fc--google .fc .fc-day-past .fc-daygrid-day-number {
+  color: #80868b;
+}
+
+.dm-fc--google .fc .fc-day-today .fc-daygrid-day-number {
+  background: #1a73e8;
+  border-radius: 9999px;
+  color: #ffffff;
+  font-weight: 700;
+  min-width: 1.75rem;
+  text-align: center;
+}
+
+.dm-fc--google .fc .fc-daygrid-day.fc-day-today {
+  background: #f8f9fa;
+}
+
+.dm-fc--google .fc .fc-highlight {
+  background: rgba(26, 115, 232, 0.2);
+}
+
+.dm-fc--google .fc .fc-daygrid-event {
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  margin-top: 2px;
+  padding: 2px 6px;
+}
+
+.dm-fc--google .fc .fc-more-link {
+  color: #1967d2;
+  font-weight: 600;
+}
+
+.dual-range {
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  appearance: none;
+  background: transparent;
+  margin: 0;
+}
+
+.dual-range::-webkit-slider-thumb {
+  pointer-events: auto;
+  appearance: none;
+  height: 18px;
+  width: 18px;
+  border-radius: 999px;
+  background: #ffc400;
+  border: 2px solid white;
+  box-shadow: 0 1px 4px rgba(16, 32, 51, 0.25);
+  cursor: pointer;
+}
+
+.dual-range::-moz-range-thumb {
+  pointer-events: auto;
+  height: 18px;
+  width: 18px;
+  border-radius: 999px;
+  background: #ffc400;
+  border: 2px solid white;
+  cursor: pointer;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
