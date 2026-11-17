@@ -18,7 +18,7 @@ export function TextInput({ className, ...props }: InputHTMLAttributes<HTMLInput
   return (
     <input
       className={cn(
-        'h-11 w-full rounded-xl border border-line bg-white px-3 text-sm outline-none ring-gold placeholder:text-slate-400 focus:ring-2',
+        'h-11 w-full rounded-xl border border-line bg-white px-3 text-sm outline-none ring-gold placeholder:text-slate-400 focus:ring-2 focus:ring-inset',
         className,
       )}
       {...props}
@@ -29,7 +29,7 @@ export function TextInput({ className, ...props }: InputHTMLAttributes<HTMLInput
 export function TextArea({ className, ...props }: TextareaHTMLAttributes<HTMLTextAreaElement>) {
   return (
     <textarea
-      className={cn('min-h-24 w-full rounded-xl border border-line bg-white px-3 py-2 text-sm outline-none ring-gold placeholder:text-slate-400 focus:ring-2', className)}
+      className={cn('min-h-24 w-full rounded-xl border border-line bg-white px-3 py-2 text-sm outline-none ring-gold placeholder:text-slate-400 focus:ring-2 focus:ring-inset', className)}
       {...props}
     />
   )
@@ -39,7 +39,7 @@ export function SelectInput({ className, children, ...props }: SelectHTMLAttribu
   return (
     <div className="relative">
       <select
-        className={cn('h-11 w-full appearance-none rounded-xl border border-line bg-white px-3 pr-9 text-sm outline-none ring-gold focus:ring-2', className)}
+        className={cn('h-11 w-full appearance-none rounded-xl border border-line bg-white px-3 pr-9 text-sm outline-none ring-gold focus:ring-2 focus:ring-inset', className)}
         {...props}
       >
         {children}

@@ -11,7 +11,8 @@ import type {
   Vehicle,
 } from '@/types'
 import { addDays, manilaYmd, rangesOverlap } from '@/utils/dates'
-import { emptyAddons, quote } from '@/utils/pricing'
+import { emptyAddons, quotePackage } from '@/utils/pricing'
+import { DEFAULT_RENTAL_PACKAGE, resolveRentalPackage } from '@/utils/rentalPackage'
 
 function mulberry32(seed: number) {
   let value = seed
@@ -49,8 +50,7 @@ type SeedBookingInput = {
 function seedUsers(): User[] {
   return [
     user('user-admin', 'admin', 'Admin', 'admin@drivemoko.demo', '0900-000-0001', 'System Administrator', '2026-06-01'),
-    user('user-owner', 'owner', 'Juan Dela Cruz', 'owner@drivemoko.demo', '0900-000-0002', 'Car Owner', '2026-06-02', 'Bayombong, Nueva Vizcaya'),
-    user('user-partner', 'partner', 'Nehemiah Sales', 'partner@drivemoko.demo', '0900-000-0003', 'Partner (Link)', '2026-07-01', 'Solano, Nueva Vizcaya', 70),
+    user('user-partner', 'partner', 'Nehemiah Sales', 'partner@drivemoko.demo', '0900-000-0002', 'Partner (Link)', '2026-07-01', 'Solano, Nueva Vizcaya', 70),
     user('user-maria', 'customer', 'Maria Santos', 'customer@drivemoko.demo', '0900-000-0004', 'Customer', '2026-10-20', 'Solano, Nueva Vizcaya', undefined, 'N01-24-000441'),
     user('user-juan', 'customer', 'Juan Dela Cruz', 'juan@drivemoko.demo', '0900-000-0005', 'Customer', '2026-08-01', 'Bambang, Nueva Vizcaya'),
     user('user-reynald', 'customer', 'Reynald Paraíso', 'reynald@drivemoko.demo', '0900-000-0006', 'Customer', '2026-10-28', 'Bayombong, Nueva Vizcaya'),
@@ -73,10 +73,11 @@ function seedVehicles(): Vehicle[] {
       seats: 7,
       transmission: 'Automatic',
       fuel: 'Diesel',
-      pricePerDay: 5500,
+      pricePerDay: 3499,
+      rentalPackage: { rateFirstDay: 3499, rateSucceeding: 2499, rate10Days: 2199, rate15Plus: 1999 },
       listingStatus: 'approved',
       listingActive: true,
-      ownerId: 'user-owner',
+      ownerId: null,
       partnerId: 'user-partner',
       images: ['/vehicles/fortuner.jpg', '/vehicles/interior.jpg', '/vehicles/cabin.jpg', '/vehicles/mountains.jpg'],
       description: 'A spacious, powerful, and reliable SUV for family trips, business travel, or long drives around Nueva Vizcaya and nearby provinces.',
@@ -100,7 +101,7 @@ function seedVehicles(): Vehicle[] {
       pricePerDay: 2500,
       listingStatus: 'approved',
       listingActive: true,
-      ownerId: 'user-owner',
+      ownerId: null,
       partnerId: 'user-partner',
       images: ['/vehicles/vios.jpg', '/vehicles/cabin.jpg', '/vehicles/interior.jpg'],
       description: 'A light, efficient sedan for city errands and short provincial drives. Demonstration listing.',
@@ -124,8 +125,8 @@ function seedVehicles(): Vehicle[] {
       pricePerDay: 4000,
       listingStatus: 'approved',
       listingActive: true,
-      ownerId: 'user-owner',
-      partnerId: null,
+      ownerId: null,
+      partnerId: 'user-partner',
       images: ['/vehicles/xpander.jpg', '/vehicles/interior.jpg', '/vehicles/cabin.jpg'],
       description: 'A seven-seat MPV for family outings and airport runs around Nueva Vizcaya. Demonstration listing.',
       features: ['7 Seater', 'Automatic', 'Gasoline', 'Airconditioning', 'Rear Camera', 'Bluetooth'],
@@ -148,7 +149,7 @@ function seedVehicles(): Vehicle[] {
       pricePerDay: 6500,
       listingStatus: 'approved',
       listingActive: true,
-      ownerId: 'user-owner',
+      ownerId: null,
       partnerId: 'user-partner',
       images: ['/vehicles/hiace.jpg', '/vehicles/interior.jpg', '/vehicles/mountains.jpg'],
       description: 'A twelve-seat van for groups, events, and out-of-town travel. Demonstration listing.',
@@ -310,9 +311,26 @@ function seedSettings() {
     holdPendingBookings: true,
     companyCommissionRate: 0,
     defaultPartnerShare: 70,
+    defaultPartnerFixedShare: { rateFirstDay: 2000, rateSucceeding: 1500, rate10Days: 1300, rate15Plus: 1200 },
+    defaultDriverPackage: { insidePerDay: 1000, outsideFirstDay: 3000, outsideSucceeding: 1000 },
+    securityDepositAmount: 3000,
     ownersCanBlockAvailability: true,
     smsSenderName: 'Drive Moko',
-    locations: ['Nueva Vizcaya', 'Bayombong', 'Solano', 'Bambang', 'Bagabag', 'Diadi', 'Quezon', 'Aritao', 'Dupax del Sur', 'Kasibu', 'Santa Fe'],
+    locations: [
+      'Nueva Vizcaya',
+      'Bayombong',
+      'Solano',
+      'Bambang',
+      'Bagabag',
+      'Diadi',
+      'Quezon',
+      'Aritao',
+      'Dupax del Sur',
+      'Kasibu',
+      'Santa Fe',
+      'Outside Nueva Vizcaya',
+    ],
+    defaultRentalPackage: { ...DEFAULT_RENTAL_PACKAGE },
   }
 }
 
@@ -374,7 +392,16 @@ function appendSeedBooking(
 ) {
     const vehicle = vehicles.find((item) => item.id === seedBooking.vehicleId)!
     const rentalType = seedBooking.rentalType ?? 'self-drive'
-    const pricing = quote(vehicle.pricePerDay, seedBooking.pickupDate, seedBooking.returnDate, rentalType, emptyAddons())
+    const pricing = quotePackage(
+      resolveRentalPackage(vehicle, seedSettings()),
+      seedBooking.pickupDate,
+      seedBooking.returnDate,
+      rentalType,
+      emptyAddons(),
+      undefined,
+      undefined,
+      seedSettings().securityDepositAmount,
+    )
     const createdAt = `${seedBooking.pickupDate}T01:00:00.000Z`
     const history = [{ id: `${seedBooking.id}-h1`, at: createdAt, action: 'Booking request created', by: 'System' }]
     if (seedBooking.status === 'confirmed' || seedBooking.status === 'ongoing' || seedBooking.status === 'completed') {
@@ -501,6 +528,7 @@ export function createMinimalSeed(): DemoData {
     inquiries: [],
     reviews: minimalReviews(),
     smsLogs: [],
+    partnerDisbursements: [],
     sessionUserId: null,
     bookingSeq: 100,
     version: 1,
@@ -526,7 +554,7 @@ export function createFullSeed(): DemoData {
       note('ntf-2', 'user-admin', 'Partner application', 'Anna Reyes submitted a partner application.', '/admin/partners'),
       note('ntf-3', 'user-admin', 'Vehicle awaiting approval', 'Nehemiah Sales submitted a Toyota Wigo.', '/admin/vehicles'),
       note('ntf-4', 'user-maria', 'Booking confirmed', 'Your Toyota Vios rental DM-2026-0144 is confirmed.', '/customer/bookings'),
-      note('ntf-5', 'user-owner', 'Vehicle on rental', 'Toyota Fortuner is out with DM-2026-0145.', '/owner/bookings'),
+      note('ntf-5', 'user-partner', 'Vehicle on rental', 'Toyota Fortuner is out with DM-2026-0145.', '/partner/reservations'),
       note('ntf-6', 'user-partner', 'Share recorded', 'Fortuner rental DM-2026-0145 is ongoing.', '/partner/reservations'),
       note('ntf-7', 'user-juan', 'Rental started', 'Your Fortuner rental is marked ongoing.', '/customer/bookings'),
     ],
@@ -552,6 +580,7 @@ export function createFullSeed(): DemoData {
         bookingId: 'b-0145',
       },
     ],
+    partnerDisbursements: [],
     sessionUserId: null,
     bookingSeq,
     version: 1,

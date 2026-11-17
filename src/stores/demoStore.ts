@@ -1,6 +1,9 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { createFullSeed, createMinimalSeed } from '@/data/seed'
+import { isSupabaseProvider } from '@/lib/config'
+import { createBooking as createSupabaseBooking } from '@/services/supabase/bookings'
+import { persistBookingContract } from '@/services/bookingContract'
 import type {
   ApplicationInput,
   Booking,
@@ -9,7 +12,10 @@ import type {
   DemoData,
   InquiryInput,
   MaintenanceInput,
+  PartnerAdminInput,
+  PartnerDisbursement,
   Payment,
+  RecordPartnerDisbursementInput,
   PaymentInput,
   PaymentStatus,
   Role,
@@ -19,9 +25,12 @@ import type {
   Vehicle,
   VehicleInput,
 } from '@/types'
-import { scheduleIssues } from '@/utils/bookingRules'
+import { findMatchingPendingBooking, scheduleIssues } from '@/utils/bookingRules'
 import { canTransition } from '@/utils/bookingRules'
-import { quote } from '@/utils/pricing'
+import { DEFAULT_SETTINGS } from '@/services/supabase/defaults'
+import { quotePackage } from '@/utils/pricing'
+import { partnerSliceStats } from '@/utils/partnerLedger'
+import { resolveRentalPackage } from '@/utils/rentalPackage'
 
 export class DemoError extends Error {}
 
@@ -31,7 +40,7 @@ interface DemoActions {
   resetDemo: () => void
   resetDemoFull: () => void
   toggleFavorite: (userId: string, vehicleId: string) => void
-  createBooking: (input: CreateBookingInput) => Booking
+  createBooking: (input: CreateBookingInput) => Promise<Booking>
   transitionBooking: (id: string, status: BookingStatus, actorId: string, note?: string) => Booking
   updateBooking: (id: string, patch: Partial<Booking>, actorId: string) => Booking
   createVehicle: (input: VehicleInput, actorId: string) => Vehicle
@@ -45,6 +54,8 @@ interface DemoActions {
   registerCustomer: (input: UserInput) => User
   createUser: (input: UserInput, actorId: string) => User
   updateUser: (id: string, patch: Partial<User>, actorId: string) => User
+  savePartnerAdminProfile: (partnerId: string, input: PartnerAdminInput, actorId: string) => void
+  recordPartnerDisbursement: (input: RecordPartnerDisbursementInput, actorId: string) => PartnerDisbursement
   submitApplication: (input: ApplicationInput) => void
   reviewApplication: (id: string, decision: 'approved' | 'rejected' | 'needs_info', actorId: string, shareRate?: number, reviewNote?: string) => void
   createInquiry: (input: InquiryInput) => void
@@ -133,12 +144,13 @@ export const useDemoStore = create<DemoState>()(
           version: get().version + 1,
         })
       },
-      createBooking: (input) => {
+      createBooking: async (input) => {
+        if (isSupabaseProvider()) {
+          return createSupabaseBooking(input)
+        }
         const state = get()
         const vehicle = state.vehicles.find((item) => item.id === input.vehicleId)
         if (!vehicle) throw new DemoError('Vehicle not found.')
-        const issues = scheduleIssues(input, state)
-        if (issues.length) throw new DemoError(issues[0])
         let users = state.users
         let customerId = input.customerId
         if (input.customer) {
@@ -179,7 +191,52 @@ export const useDemoStore = create<DemoState>()(
           }
         }
         if (!customerId) throw new DemoError('Customer information is required.')
-        const pricing = quote(vehicle.pricePerDay, input.pickupDate, input.returnDate, input.rentalType, input.addons)
+        const existingPending = findMatchingPendingBooking(state.bookings, customerId, input)
+        const issues = scheduleIssues(
+          { ...input, customerId, ignoreBookingId: existingPending?.id },
+          state,
+        )
+        if (issues.length) throw new DemoError(issues[0])
+        const pkg = resolveRentalPackage(vehicle, state.settings)
+        const pricing = quotePackage(
+          pkg,
+          input.pickupDate,
+          input.returnDate,
+          input.rentalType,
+          input.addons,
+          input.driverZone,
+          state.settings.defaultDriverPackage,
+          state.settings.securityDepositAmount,
+        )
+        if (existingPending) {
+          let contractStoragePath = existingPending.contractStoragePath
+          let contractSignedAt = existingPending.contractSignedAt
+          let contractSignerName = existingPending.contractSignerName
+          if (input.contract) {
+            const saved = await persistBookingContract(existingPending.id, existingPending.reference, input.contract)
+            contractStoragePath = saved.contractStoragePath
+            contractSignedAt = saved.contractSignedAt
+            contractSignerName = saved.contractSignerName
+          }
+          const booking: Booking = {
+            ...existingPending,
+            pickupLocation: input.pickupLocation,
+            rentalType: input.rentalType,
+            addons: input.addons,
+            specialRequest: input.specialRequest,
+            documentName: input.documentName,
+            pricing,
+            contractStoragePath,
+            contractSignedAt,
+            contractSignerName,
+          }
+          set({
+            users,
+            bookings: state.bookings.map((item) => (item.id === booking.id ? booking : item)),
+            version: state.version + 1,
+          })
+          return booking
+        }
         let seq = state.bookingSeq
         let reference = `DM-2026-${String(seq).padStart(4, '0')}`
         while (state.bookings.some((booking) => booking.reference === reference)) {
@@ -214,13 +271,18 @@ export const useDemoStore = create<DemoState>()(
           ],
           createdAt: new Date().toISOString(),
         }
+        if (input.contract) {
+          const saved = await persistBookingContract(booking.id, reference, input.contract)
+          booking.contractStoragePath = saved.contractStoragePath
+          booking.contractSignedAt = saved.contractSignedAt
+          booking.contractSignerName = saved.contractSignerName
+        }
         const customer = users.find((user) => user.id === customerId)
         const noteBody = `${customer?.name ?? 'A customer'} requested ${vehicle.name} (${reference}).`
         const notifications = [
           ...state.notifications,
           ...fanout(users, { role: 'admin' }, 'New booking', noteBody, '/admin/bookings'),
           ...fanout(users, { id: customerId }, 'Booking received', `${reference} is pending confirmation.`, '/customer/bookings'),
-          ...(vehicle.ownerId ? fanout(users, { id: vehicle.ownerId }, 'Rental request', noteBody, '/owner/bookings') : []),
           ...(vehicle.partnerId ? fanout(users, { id: vehicle.partnerId }, 'Rental request', noteBody, '/partner/reservations') : []),
         ]
         set({ users, bookings: [booking, ...state.bookings], bookingSeq: seq + 1, notifications, version: state.version + 1 })
@@ -258,7 +320,6 @@ export const useDemoStore = create<DemoState>()(
         const notifications = [
           ...state.notifications,
           ...fanout(state.users, { id: booking.customerId }, 'Booking update', body, '/customer/bookings'),
-          ...(vehicle?.ownerId ? fanout(state.users, { id: vehicle.ownerId }, 'Booking update', body, '/owner/bookings') : []),
           ...(vehicle?.partnerId ? fanout(state.users, { id: vehicle.partnerId }, 'Booking update', body, '/partner/reservations') : []),
           ...fanout(state.users, { role: 'admin' }, 'Booking update', body, '/admin/bookings'),
         ]
@@ -288,7 +349,17 @@ export const useDemoStore = create<DemoState>()(
         if (issues.length) throw new DemoError(issues[0])
         const vehicle = state.vehicles.find((item) => item.id === next.vehicleId)
         if (!vehicle) throw new DemoError('Vehicle not found.')
-        next.pricing = quote(vehicle.pricePerDay, next.pickupDate, next.returnDate, next.rentalType, next.addons)
+        const pkg = resolveRentalPackage(vehicle, get().settings)
+        next.pricing = quotePackage(
+          pkg,
+          next.pickupDate,
+          next.returnDate,
+          next.rentalType,
+          next.addons,
+          undefined,
+          get().settings.defaultDriverPackage,
+          get().settings.securityDepositAmount,
+        )
         next.paymentStatus = paymentStatusOf(next.id, state.payments, next.pricing.total)
         next.history = [...current.history, { id: uid('hist'), at: new Date().toISOString(), action: 'Booking details updated', by: actorName(state.users, actorId) }]
         set({
@@ -302,8 +373,9 @@ export const useDemoStore = create<DemoState>()(
         const actor = state.users.find((user) => user.id === actorId)
         if (!actor || actor.role === 'customer') throw new DemoError('You cannot add a vehicle.')
         let vehicle: Vehicle = { ...input, id: uid('veh'), createdAt: new Date().toISOString() }
-        if (actor.role === 'owner') vehicle = { ...vehicle, ownerId: actor.id, listingStatus: 'pending', listingActive: false }
-        if (actor.role === 'partner') vehicle = { ...vehicle, partnerId: actor.id, listingStatus: 'pending', listingActive: false }
+        if (actor.role === 'partner' || actor.role === 'owner') {
+          vehicle = { ...vehicle, partnerId: actor.id, ownerId: null, listingStatus: 'pending', listingActive: false }
+        }
         set({
           vehicles: [vehicle, ...state.vehicles],
           notifications: [...state.notifications, ...fanout(state.users, { role: 'admin' }, 'Vehicle submitted', `${actor.name} submitted ${vehicle.name}.`, '/admin/vehicles')],
@@ -317,9 +389,11 @@ export const useDemoStore = create<DemoState>()(
         const current = state.vehicles.find((vehicle) => vehicle.id === id)
         if (!actor || !current) throw new DemoError('Vehicle not found.')
         if (actor.role === 'customer') throw new DemoError('You cannot edit vehicles.')
-        if (actor.role === 'owner' && current.ownerId !== actor.id) throw new DemoError('You can only update your own vehicles.')
-        if (actor.role === 'partner' && current.partnerId !== actor.id) throw new DemoError('You can only update your own listings.')
+        if ((actor.role === 'partner' || actor.role === 'owner') && current.partnerId !== actor.id) {
+          throw new DemoError('You can only update your own listings.')
+        }
         const nextPatch = { ...patch }
+        if (nextPatch.promoVideo === '') nextPatch.promoVideo = undefined
         if (actor.role !== 'admin') {
           delete nextPatch.ownerId
           delete nextPatch.partnerId
@@ -348,8 +422,9 @@ export const useDemoStore = create<DemoState>()(
         if (!actor || !vehicle) throw new DemoError('Vehicle not found.')
         const allowed =
           actor.role === 'admin' ||
-          (actor.role === 'owner' && vehicle.ownerId === actor.id && state.settings.ownersCanBlockAvailability) ||
-          (actor.role === 'partner' && vehicle.partnerId === actor.id && state.settings.ownersCanBlockAvailability)
+          ((actor.role === 'partner' || actor.role === 'owner') &&
+            vehicle.partnerId === actor.id &&
+            state.settings.ownersCanBlockAvailability)
         if (!allowed) throw new DemoError('You cannot block dates for this vehicle.')
         if (input.endDate < input.startDate) throw new DemoError('The end date must be on or after the start date.')
         set({
@@ -465,10 +540,22 @@ export const useDemoStore = create<DemoState>()(
           email: input.email.trim(),
           phone: input.phone,
           address: input.address,
-          title: input.role === 'owner' ? 'Car Owner' : input.role === 'partner' ? 'Partner (Link)' : 'Customer',
+          title: input.role === 'partner' ? 'Partner (Link)' : 'Customer',
           status: 'active',
-          shareRate: input.role === 'partner' ? input.shareRate ?? state.settings.defaultPartnerShare : undefined,
           notes: input.notes,
+          partnerProfile:
+            input.role === 'partner'
+              ? {
+                  businessName: '',
+                  vehicleCount: 0,
+                  ownershipType: 'owned',
+                  vehicleSummary: '',
+                  contractReference: '',
+                  contractNotes: '',
+                  contactPerson: input.name,
+                  fixedShare: { ...state.settings.defaultPartnerFixedShare },
+                }
+              : undefined,
           createdAt: new Date().toISOString(),
         }
         set({ users: [...state.users, created], version: state.version + 1 })
@@ -486,6 +573,74 @@ export const useDemoStore = create<DemoState>()(
         const next = { ...current, ...patch, id: current.id, email: patch.email?.trim() || current.email }
         set({ users: state.users.map((user) => (user.id === id ? next : user)), version: state.version + 1 })
         return next
+      },
+      savePartnerAdminProfile: (partnerId, input, actorId) => {
+        const state = get()
+        requireAdmin(state.users, actorId)
+        const current = state.users.find((user) => user.id === partnerId)
+        if (!current || current.role !== 'partner') throw new DemoError('Partner not found.')
+        const partnerProfile = {
+          businessName: current.partnerProfile?.businessName ?? '',
+          vehicleCount: current.partnerProfile?.vehicleCount ?? 0,
+          ownershipType: current.partnerProfile?.ownershipType ?? 'owned' as const,
+          vehicleSummary: current.partnerProfile?.vehicleSummary ?? '',
+          contractReference: current.partnerProfile?.contractReference ?? '',
+          contractNotes: current.partnerProfile?.contractNotes ?? '',
+          contactPerson: current.partnerProfile?.contactPerson ?? current.name,
+          agreementSignedAt: current.partnerProfile?.agreementSignedAt,
+          rentalPackage: input.rentalPackage ?? current.partnerProfile?.rentalPackage,
+          fixedShare: input.fixedShare,
+        }
+        const users = state.users.map((user) =>
+          user.id === partnerId
+            ? {
+                ...user,
+                name: input.name?.trim() || user.name,
+                notes: input.notes ?? user.notes,
+                partnerProfile,
+              }
+            : user,
+        )
+        const vehicles =
+          input.rentalPackage != null
+            ? state.vehicles.map((vehicle) =>
+                vehicle.partnerId === partnerId
+                  ? {
+                      ...vehicle,
+                      rentalPackage: input.rentalPackage!,
+                      pricePerDay: input.rentalPackage!.rateFirstDay,
+                    }
+                  : vehicle,
+              )
+            : state.vehicles
+        set({ users, vehicles, version: state.version + 1 })
+      },
+      recordPartnerDisbursement: (input, actorId) => {
+        const state = get()
+        requireAdmin(state.users, actorId)
+        const partner = state.users.find((user) => user.id === input.partnerId)
+        if (!partner || partner.role !== 'partner') throw new DemoError('Partner not found.')
+        if (input.amount <= 0) throw new DemoError('Enter a positive amount.')
+        if (!input.payoutReference.trim()) throw new DemoError('Payout reference is required.')
+        const stats = partnerSliceStats(state, state.partnerDisbursements ?? [], input.partnerId)
+        if (input.amount > stats.outstandingPayable + 0.01) {
+          throw new DemoError(`Amount exceeds outstanding payable (${stats.outstandingPayable}).`)
+        }
+        const row: PartnerDisbursement = {
+          id: uid('disb'),
+          partnerId: input.partnerId,
+          amount: Math.round(input.amount * 100) / 100,
+          payoutReference: input.payoutReference.trim(),
+          method: input.method ?? 'gcash',
+          paidAt: new Date().toISOString(),
+          notes: input.notes,
+          createdBy: actorId,
+        }
+        set({
+          partnerDisbursements: [row, ...(state.partnerDisbursements ?? [])],
+          version: state.version + 1,
+        })
+        return row
       },
       submitApplication: (input) => {
         const state = get()
@@ -597,6 +752,7 @@ export const useDemoStore = create<DemoState>()(
         vehicles: state.vehicles,
         bookings: state.bookings,
         payments: state.payments,
+        partnerDisbursements: state.partnerDisbursements ?? [],
         maintenance: state.maintenance,
         favorites: state.favorites,
         notifications: state.notifications,
@@ -613,7 +769,30 @@ export const useDemoStore = create<DemoState>()(
       merge: (persisted, current) => {
         const data = persisted as Partial<DemoData> | undefined
         if (!data?.users || !data.vehicles || !data.bookings || !data.settings) return current
-        return { ...current, ...data }
+        return {
+          ...current,
+          ...data,
+          settings: {
+            ...DEFAULT_SETTINGS,
+            ...current.settings,
+            ...data.settings,
+            defaultRentalPackage: {
+              ...DEFAULT_SETTINGS.defaultRentalPackage,
+              ...data.settings?.defaultRentalPackage,
+            },
+            defaultPartnerFixedShare: {
+              ...DEFAULT_SETTINGS.defaultPartnerFixedShare,
+              ...data.settings?.defaultPartnerFixedShare,
+            },
+            defaultDriverPackage: {
+              ...DEFAULT_SETTINGS.defaultDriverPackage,
+              ...data.settings?.defaultDriverPackage,
+            },
+            securityDepositAmount:
+              data.settings?.securityDepositAmount ?? DEFAULT_SETTINGS.securityDepositAmount,
+          },
+          partnerDisbursements: data.partnerDisbursements ?? [],
+        }
       },
     },
   ),

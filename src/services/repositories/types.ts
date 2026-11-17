@@ -7,7 +7,10 @@ import type {
   InquiryInput,
   MaintenanceInput,
   Payment,
+  PartnerAdminInput,
+  PartnerDisbursement,
   PaymentInput,
+  RecordPartnerDisbursementInput,
   SmsInput,
   User,
   UserInput,
@@ -47,6 +50,9 @@ export interface PartnerRepository {
   listApplications: () => Promise<DemoData['applications']>
   submit: (input: ApplicationInput) => Promise<void>
   review: (id: string, decision: 'approved' | 'rejected' | 'needs_info', actorId: string, shareRate?: number, reviewNote?: string) => Promise<void>
+  saveAdminProfile: (partnerId: string, input: PartnerAdminInput, actorId: string) => Promise<void>
+  listDisbursements: (partnerId?: string) => Promise<PartnerDisbursement[]>
+  recordDisbursement: (input: RecordPartnerDisbursementInput, actorId: string) => Promise<PartnerDisbursement>
 }
 
 export interface NotificationRepository {
@@ -57,7 +63,7 @@ export interface NotificationRepository {
 }
 
 export interface DemoRepository {
-  snapshot: () => DemoData
+  snapshot: () => DemoData | Promise<DemoData>
   vehicles: VehicleRepository
   bookings: BookingRepository
   users: UserRepository

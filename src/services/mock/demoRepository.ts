@@ -14,6 +14,7 @@ export const demoRepository: DemoRepository = {
       vehicles: state.vehicles,
       bookings: state.bookings,
       payments: state.payments,
+      partnerDisbursements: state.partnerDisbursements ?? [],
       maintenance: state.maintenance,
       favorites: state.favorites,
       notifications: state.notifications,
@@ -56,6 +57,14 @@ export const demoRepository: DemoRepository = {
     listApplications: async () => data().applications,
     submit: async (input) => data().submitApplication(input),
     review: async (id, decision, actorId, shareRate, reviewNote) => data().reviewApplication(id, decision, actorId, shareRate, reviewNote),
+    saveAdminProfile: async (partnerId, input, actorId) => {
+      data().savePartnerAdminProfile(partnerId, input, actorId)
+    },
+    listDisbursements: async (partnerId) => {
+      const rows = data().partnerDisbursements ?? []
+      return partnerId ? rows.filter((row) => row.partnerId === partnerId) : rows
+    },
+    recordDisbursement: async (input, actorId) => data().recordPartnerDisbursement(input, actorId),
   },
   notifications: {
     list: async () => data().notifications,

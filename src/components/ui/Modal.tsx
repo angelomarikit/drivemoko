@@ -23,6 +23,7 @@ export function Modal({
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-50 bg-[#071833]/55 backdrop-blur-[1px]" />
         <Dialog.Content
+          onOpenAutoFocus={(event) => event.preventDefault()}
           className={cn(
             'fixed left-1/2 top-1/2 z-50 max-h-[92vh] w-[min(560px,calc(100%-1.25rem))] -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-2xl bg-white p-5 shadow-2xl',
             wide && 'w-[min(920px,calc(100%-1.25rem))]',

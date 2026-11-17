@@ -12,6 +12,29 @@ export type AccountStatus = 'active' | 'suspended'
 export type ApplicationStatus = 'pending' | 'approved' | 'rejected' | 'needs_info'
 export type OwnershipType = 'owned' | 'financed' | 'fleet'
 
+export interface PartnerProfileDetails {
+  businessName: string
+  vehicleCount: number
+  ownershipType: OwnershipType
+  vehicleSummary: string
+  contractReference: string
+  contractNotes: string
+  contactPerson: string
+  agreementSignedAt?: string
+  /** Admin-set fleet rental package; shown on partner dashboard and applied to their vehicles */
+  rentalPackage?: RentalPackage
+  /** Fixed partner earnings per rental day (tiers); not % of booking total */
+  fixedShare?: RentalPackage
+}
+
+export interface PartnerAdminInput {
+  name?: string
+  notes?: string
+  /** Customer list prices — edit per vehicle or Admin → Rental packages, not on partner profile */
+  rentalPackage?: RentalPackage
+  fixedShare: RentalPackage
+}
+
 export interface User {
   id: string
   role: Role
@@ -22,6 +45,7 @@ export interface User {
   title: string
   status: AccountStatus
   shareRate?: number
+  partnerProfile?: PartnerProfileDetails
   licenseNumber?: string
   emergencyName?: string
   emergencyPhone?: string
@@ -38,6 +62,13 @@ export interface Review {
   createdAt: string
 }
 
+export interface RentalPackage {
+  rateFirstDay: number
+  rateSucceeding: number
+  rate10Days: number
+  rate15Plus: number
+}
+
 export interface Vehicle {
   id: string
   name: string
@@ -49,11 +80,14 @@ export interface Vehicle {
   transmission: Transmission
   fuel: FuelType
   pricePerDay: number
+  rentalPackage?: RentalPackage
   listingStatus: ListingStatus
   listingActive: boolean
   ownerId: string | null
   partnerId: string | null
   images: string[]
+  /** Storage path, data URL (demo), or public URL for product-page showcase video */
+  promoVideo?: string
   description: string
   features: string[]
   inclusions: string[]
@@ -70,6 +104,8 @@ export interface PriceBreakdown {
   insurance: number
   driver: number
   childSeat: number
+  /** Refundable hold; included in total. */
+  securityDeposit: number
   total: number
 }
 
@@ -106,6 +142,9 @@ export interface Booking {
   notes: string
   history: BookingHistoryEntry[]
   createdAt: string
+  contractStoragePath?: string
+  contractSignedAt?: string
+  contractSignerName?: string
 }
 
 export interface Payment {
@@ -188,13 +227,43 @@ export interface Inquiry {
   createdAt: string
 }
 
+export interface DriverPackageSettings {
+  insidePerDay: number
+  outsideFirstDay: number
+  outsideSucceeding: number
+}
+
 export interface Settings {
   holdPendingBookings: boolean
   companyCommissionRate: number
+  /** @deprecated Legacy % fallback; use defaultPartnerFixedShare */
   defaultPartnerShare: number
+  defaultPartnerFixedShare: RentalPackage
   ownersCanBlockAvailability: boolean
   smsSenderName: string
   locations: string[]
+  defaultRentalPackage: RentalPackage
+  defaultDriverPackage: DriverPackageSettings
+  securityDepositAmount: number
+}
+
+export interface PartnerDisbursement {
+  id: string
+  partnerId: string
+  amount: number
+  payoutReference: string
+  method?: PaymentMethod
+  paidAt: string
+  notes?: string
+  createdBy?: string
+}
+
+export interface RecordPartnerDisbursementInput {
+  partnerId: string
+  amount: number
+  payoutReference: string
+  method?: PaymentMethod
+  notes?: string
 }
 
 export interface DemoData {
@@ -202,6 +271,7 @@ export interface DemoData {
   vehicles: Vehicle[]
   bookings: Booking[]
   payments: Payment[]
+  partnerDisbursements: PartnerDisbursement[]
   maintenance: MaintenanceWindow[]
   favorites: Favorite[]
   notifications: AppNotification[]
@@ -236,9 +306,13 @@ export interface CreateBookingInput {
   pickupTime: string
   returnTime: string
   rentalType: RentalType
+  /** When rentalType is with-driver, inside vs outside driver package. */
+  driverZone?: 'inside' | 'outside'
   addons: BookingAddons
   specialRequest: string
   documentName?: string
+  /** Signed contract payload (reference added when the booking is created). */
+  contract?: import('@/utils/rentalContract').RentalContractData
   actorId: string | null
 }
 
@@ -252,11 +326,14 @@ export interface VehicleInput {
   transmission: Transmission
   fuel: FuelType
   pricePerDay: number
+  rentalPackage?: RentalPackage
   listingStatus: ListingStatus
   listingActive: boolean
   ownerId: string | null
   partnerId: string | null
   images: string[]
+  /** Storage path, data URL (demo), or public URL for product-page showcase video */
+  promoVideo?: string
   description: string
   features: string[]
   inclusions: string[]
@@ -273,6 +350,7 @@ export interface PaymentInput {
   reference: string
   markVerified: boolean
   actorId: string
+  proofFile?: File
 }
 
 export interface MaintenanceInput {
@@ -303,7 +381,7 @@ export interface InquiryInput {
 }
 
 export interface UserInput {
-  role: Extract<Role, 'owner' | 'partner' | 'customer'>
+  role: Extract<Role, 'partner' | 'customer'>
   name: string
   email: string
   phone: string

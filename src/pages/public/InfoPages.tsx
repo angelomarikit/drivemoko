@@ -76,7 +76,7 @@ export function PartnerPage() {
             })}
           >
             <h2 className="flex items-center gap-2 text-lg font-extrabold"><Handshake className="h-5 w-5" /> Partner With Us</h2>
-            <p className="mb-3 text-sm text-muted">Fill out the form and the admin desk can review it in this demo.</p>
+            <p className="mb-3 text-sm text-muted">Submit the form and our team will review your partner application.</p>
             <div className="space-y-3">
               <label><FieldLabel required>Full Name</FieldLabel><TextInput {...form.register('fullName')} placeholder="Enter your full name" /></label>
               <label><FieldLabel required>Contact Number</FieldLabel><TextInput {...form.register('phone')} placeholder="e.g. 09XX XXX XXXX" /></label>
@@ -104,7 +104,7 @@ export function PartnerPage() {
         <h2 className="text-center text-2xl font-extrabold">Why Partner with Drive Moko?</h2>
         <div className="mt-5 grid gap-4 md:grid-cols-4">
           {[
-            ['Trusted & Secured', 'Your vehicle is listed on a rental desk you can follow in the demo.'],
+            ['Trusted & Secured', 'Your vehicle is listed on the Drive Moko rental desk with clear reservations.'],
             ['More Bookings', 'Customers searching Nueva Vizcaya can request your approved unit.'],
             ['Flexible Setup', 'Rates and the partner share are configured, not locked in the layout.'],
             ['Dedicated Support', 'Administrators approve the listing before it appears publicly.'],
@@ -133,7 +133,7 @@ export function AboutPage() {
         <img src="/cover.jpg" alt="Drive Moko brand artwork" className="w-full rounded-3xl bg-canvas object-contain" />
         <div className="space-y-4">
           <h2 className="text-2xl font-extrabold">Company introduction</h2>
-          <p className="text-sm leading-7 text-muted">Drive Moko Car Rentals is the rental desk of {BRAND.company} for trips around Nueva Vizcaya. This page is editable demonstration copy for the future production site.</p>
+          <p className="text-sm leading-7 text-muted">Drive Moko Car Rentals is the rental desk of {BRAND.company} for trips around Nueva Vizcaya and nearby provinces.</p>
           <div className="grid gap-3 sm:grid-cols-2">
             <article className="rounded-2xl bg-canvas p-4"><h3 className="font-bold">Mission</h3><p className="mt-1 text-sm text-muted">Make local car rental easy to book, confirm, and track.</p></article>
             <article className="rounded-2xl bg-canvas p-4"><h3 className="font-bold">Vision</h3><p className="mt-1 text-sm text-muted">A trusted Nueva Vizcaya fleet shared by owners, partners, and travelers.</p></article>
@@ -150,15 +150,15 @@ export function ContactPage() {
   const form = useForm<z.infer<typeof contactSchema>>({ resolver: zodResolver(contactSchema) })
   return (
     <div className="bg-canvas">
-      <PageHero title="Contact Us" text="Send a demo inquiry. No message leaves this browser." />
+      <PageHero title="Contact Us" text="Reach the Drive Moko team for bookings, fleet, and partnerships." />
       <div className="mx-auto grid max-w-[1440px] gap-6 px-4 py-10 lg:grid-cols-[0.8fr_1.2fr]">
         <aside className="rounded-3xl bg-navy p-6 text-white">
           <h2 className="text-xl font-bold">Reach the desk</h2>
           <dl className="mt-4 space-y-3 text-sm text-white/80">
             <div><dt className="font-bold text-white">Phone</dt><dd>Placeholder — official number not provided</dd></div>
             <div><dt className="font-bold text-white">Address</dt><dd>Placeholder — office address not provided. Service area: Nueva Vizcaya.</dd></div>
-            <div><dt className="font-bold text-white">Email</dt><dd>hello@drivemoko.demo</dd></div>
-            <div><dt className="font-bold text-white">Social</dt><dd>Demo links only. No live profiles are connected.</dd></div>
+            <div><dt className="font-bold text-white">Email</dt><dd>hello@drivemoko.com</dd></div>
+            <div><dt className="font-bold text-white">Social</dt><dd>Follow Drive Moko on Facebook and Messenger for updates.</dd></div>
           </dl>
         </aside>
         <form className="rounded-3xl bg-white p-6" onSubmit={form.handleSubmit(async (values) => { await actions.inquiry(values); form.reset() })}>

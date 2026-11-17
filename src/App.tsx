@@ -1,9 +1,11 @@
 import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
+import { useSyncSupabaseProfileToDemo } from '@/hooks/useSyncSupabaseProfileToDemo'
 import { AppRoutes } from '@/routes/AppRoutes'
 import { useUiStore } from '@/stores/uiStore'
 
 export function App() {
+  useSyncSupabaseProfileToDemo()
   return (
     <>
       <AppRoutes />

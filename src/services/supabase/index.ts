@@ -1,5 +1,2 @@
-import type { DemoRepository } from '@/services/repositories/types'
-
-export function createSupabaseRepositories(): DemoRepository {
-  throw new Error('Supabase is not connected. This build stays on the demo data provider.')
-}
+export { supabaseRepository } from '@/services/supabase/repository'
+export { fetchSupabaseSnapshot } from '@/services/supabase/snapshot'

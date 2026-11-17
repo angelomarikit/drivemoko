@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { BrandLockup } from '@/components/layout/PublicLayout'
 import { DEMO_ACCOUNTS } from '@/constants/content'
+import { isMockProvider } from '@/lib/config'
 import { useDemoActions, useSession, useSnapshot } from '@/hooks/useDemo'
 import { homeForRole } from '@/utils/bookingRules'
 import { formatManilaStamp } from '@/utils/dates'
@@ -50,8 +51,16 @@ export function DashboardLayout({
     const bookings = data.bookings.filter((booking) => booking.reference.toLowerCase().includes(needle)).slice(0, 4)
     const people = data.users.filter((user) => user.name.toLowerCase().includes(needle) || user.email.toLowerCase().includes(needle)).slice(0, 4)
     return [
-      ...vehicles.map((vehicle) => ({ label: vehicle.name, hint: 'Vehicle', to: `/${session.role === 'admin' ? 'admin/vehicles' : session.role === 'owner' ? 'owner/vehicles' : session.role === 'partner' ? 'partner/vehicles' : 'cars'}` })),
-      ...bookings.map((booking) => ({ label: booking.reference, hint: 'Booking', to: `/${session.role === 'customer' ? 'customer/bookings' : session.role === 'partner' ? 'partner/reservations' : session.role === 'owner' ? 'owner/bookings' : 'admin/bookings'}` })),
+      ...vehicles.map((vehicle) => ({
+        label: vehicle.name,
+        hint: 'Vehicle',
+        to: `/${session.role === 'admin' ? 'admin/vehicles' : session.role === 'partner' || session.role === 'owner' ? 'partner/vehicles' : 'cars'}`,
+      })),
+      ...bookings.map((booking) => ({
+        label: booking.reference,
+        hint: 'Booking',
+        to: `/${session.role === 'customer' ? 'customer/bookings' : session.role === 'partner' || session.role === 'owner' ? 'partner/reservations' : 'admin/bookings'}`,
+      })),
       ...people.map((person) => ({ label: person.name, hint: person.role, to: session.role === 'admin' ? '/admin/customers' : homeForRole(session.role) })),
     ]
   }, [data, query, session])
@@ -157,24 +166,35 @@ export function DashboardLayout({
             <p className="font-bold">{stamp.date}</p>
             <p className="text-white/70">{stamp.time}</p>
           </div>
-          <Dropdown.Root>
-            <Dropdown.Trigger className="rounded-full bg-gold px-3 py-1 text-xs font-bold text-ink">Demo</Dropdown.Trigger>
-            <Dropdown.Portal>
-              <Dropdown.Content className="z-50 w-64 rounded-2xl bg-white p-2 text-ink shadow-xl">
-                <p className="px-2 py-1 text-xs font-bold text-muted">Switch demo role</p>
-                {DEMO_ACCOUNTS.map((account) => (
-                  <Dropdown.Item key={account.id} className="cursor-pointer rounded-xl px-2 py-2 text-sm outline-none hover:bg-canvas" onSelect={async () => {
-                    await actions.login(account.id)
-                    const role = account.id === 'user-admin' ? 'admin' : account.id === 'user-owner' ? 'owner' : account.id === 'user-partner' ? 'partner' : 'customer'
-                    navigate(homeForRole(role))
-                  }}>
-                    {account.role}
-                    <span className="block text-xs text-muted">{account.email}</span>
-                  </Dropdown.Item>
-                ))}
-              </Dropdown.Content>
-            </Dropdown.Portal>
-          </Dropdown.Root>
+          {isMockProvider() ? (
+            <Dropdown.Root>
+              <Dropdown.Trigger className="rounded-full bg-gold px-3 py-1 text-xs font-bold text-ink">Demo</Dropdown.Trigger>
+              <Dropdown.Portal>
+                <Dropdown.Content className="z-50 w-64 rounded-2xl bg-white p-2 text-ink shadow-xl">
+                  <p className="px-2 py-1 text-xs font-bold text-muted">Switch demo role</p>
+                  {DEMO_ACCOUNTS.map((account) => (
+                    <Dropdown.Item
+                      key={account.id}
+                      className="cursor-pointer rounded-xl px-2 py-2 text-sm outline-none hover:bg-canvas"
+                      onSelect={async () => {
+                        await actions.login(account.id)
+                        const role =
+                          account.id === 'user-admin'
+                            ? 'admin'
+                            : account.id === 'user-partner'
+                              ? 'partner'
+                              : 'customer'
+                        navigate(homeForRole(role))
+                      }}
+                    >
+                      {account.role}
+                      <span className="block text-xs text-muted">{account.email}</span>
+                    </Dropdown.Item>
+                  ))}
+                </Dropdown.Content>
+              </Dropdown.Portal>
+            </Dropdown.Root>
+          ) : null}
         </header>
         <main className="min-w-0 p-4 lg:p-5">
           <Outlet />

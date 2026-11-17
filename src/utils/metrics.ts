@@ -1,5 +1,6 @@
 import type { Booking, DemoData, Payment, Role, User, Vehicle } from '@/types'
 import { addDays, diffDays, formatMonthDay, manilaYmd } from '@/utils/dates'
+import { fixedShareTotalForBooking } from '@/utils/partnerShare'
 import { percentChange } from '@/utils/money'
 
 const EARNING_STATUSES = new Set(['confirmed', 'ongoing', 'completed'])
@@ -14,22 +15,19 @@ export function shareAmount(
   if (!vehicle) return 0
   const gross = booking.pricing.total
   if (viewer.role === 'admin' || viewer.role === 'customer') return gross
-  if (viewer.role === 'partner') {
+  if (viewer.role === 'partner' || viewer.role === 'owner') {
     if (vehicle.partnerId !== viewer.id) return 0
     const partner = users.find((user) => user.id === viewer.id)
-    const rate = partner?.shareRate ?? settings.defaultPartnerShare
-    return Math.round(gross * (rate / 100))
+    return fixedShareTotalForBooking(booking, partner, settings)
   }
-  if (vehicle.ownerId !== viewer.id) return 0
-  const partner = users.find((user) => user.id === vehicle.partnerId)
-  const ownerPercent = partner ? 100 - (partner.shareRate ?? settings.defaultPartnerShare) : 100 - settings.companyCommissionRate
-  return Math.round(gross * (ownerPercent / 100))
+  return 0
 }
 
 export function scopedVehicles(vehicles: Vehicle[], role: Role, userId: string) {
   if (role === 'admin') return vehicles
-  if (role === 'owner') return vehicles.filter((vehicle) => vehicle.ownerId === userId)
-  if (role === 'partner') return vehicles.filter((vehicle) => vehicle.partnerId === userId)
+  if (role === 'partner' || role === 'owner') {
+    return vehicles.filter((vehicle) => vehicle.partnerId === userId || vehicle.ownerId === userId)
+  }
   return vehicles.filter((vehicle) => vehicle.listingStatus === 'approved' && vehicle.listingActive)
 }
 

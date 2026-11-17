@@ -1,4 +1,4 @@
-import { CalendarDays, CarFront, Clock3, Coins, Percent, Plus, UserRound, Users } from 'lucide-react'
+import { CalendarDays, CarFront, Clock3, Coins, Plus, Tags, UserRound, Users } from 'lucide-react'
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Area, AreaChart, Bar, BarChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
@@ -7,12 +7,21 @@ import { VehicleImage } from '@/components/common/VehicleImage'
 import { MiniCalendar } from '@/components/dashboard/MiniCalendar'
 import { Panel } from '@/components/layout/DashboardLayout'
 import { Button } from '@/components/ui/Button'
+import { useFinancial } from '@/hooks/useFinancial'
 import { useSession, useSnapshot } from '@/hooks/useDemo'
-import type { Booking, Role, Vehicle } from '@/types'
+import { isSupabaseProvider } from '@/lib/config'
+import { pesoFromCentavos } from '@/services/supabase/financial'
+import { partnerEarningsSummary } from '@/utils/financialReports'
+import type { Booking, RentalPackage, Role, Vehicle } from '@/types'
 import { eachDate, formatPretty, formatTime, manilaYmd } from '@/utils/dates'
 import { bookingKpis, dailySeries, earningsTotal, scopedBookings, scopedVehicles, shareAmount, utilization, weeklyBars } from '@/utils/metrics'
 import { formatPeso } from '@/utils/money'
 import { cn } from '@/utils/cn'
+import { resolvePartnerFixedShare } from '@/utils/partnerShare'
+import { DriverPackageRates } from '@/components/rentals/DriverPackageRates'
+import { RentalPackageRates } from '@/components/rentals/RentalPackageRates'
+import { resolveRentalPackage } from '@/utils/rentalPackage'
+import { resolvePartnerDashboardPackage } from '@/utils/rentalPackage'
 
 export function AdminHome() {
   const { data } = useSnapshot()
@@ -66,7 +75,6 @@ export function AdminHome() {
             {[
               ['New Booking', '/admin/bookings?new=1', CalendarDays],
               ['Add Vehicle', '/admin/vehicles?new=1', CarFront],
-              ['Add Car Owner', '/admin/owners?new=1', UserRound],
               ['Add Partner', '/admin/partners?new=1', Users],
               ['Record Payment', '/admin/payments?new=1', Coins],
               ['Send SMS', '/admin/sms?new=1', Clock3],
@@ -79,7 +87,7 @@ export function AdminHome() {
           </div>
         </Panel>
         <Panel className="relative overflow-hidden p-0 xl:col-span-3">
-          <img src="/vehicles/fortuner.jpg" alt="Demo photo" className="h-full min-h-56 w-full object-cover" />
+          <img src="/vehicles/fortuner.jpg" alt="Drive Moko fleet" className="h-full min-h-56 w-full object-cover" />
           <div className="absolute inset-0 bg-gradient-to-t from-navy via-navy/20 to-transparent" />
           <div className="absolute bottom-4 left-4 text-white">
             <p className="text-lg font-black italic">DRIVE MOKO</p>
@@ -112,46 +120,60 @@ export function AdminHome() {
   )
 }
 
-export function OwnerHome() {
-  return <FleetHome role="owner" />
-}
-
 export function PartnerHome() {
-  return <FleetHome role="partner" />
+  return <FleetHome />
 }
 
-function FleetHome({ role }: { role: 'owner' | 'partner' }) {
+function FleetHome() {
   const session = useSession()
   const { data } = useSnapshot()
   const navigate = useNavigate()
   const [day, setDay] = useState(manilaYmd())
+  const financial = useFinancial()
   if (!data || !session) return null
-  const viewer = { role: role as Role, id: session.id }
-  const vehicles = scopedVehicles(data.vehicles, role, session.id)
-  const bookings = scopedBookings(data.bookings, data.vehicles, role, session.id)
+  const fleetRole: Role = session.role === 'owner' ? 'partner' : session.role
+  const viewer = { role: fleetRole, id: session.id }
+  const vehicles = scopedVehicles(data.vehicles, session.role, session.id)
+  const bookings = scopedBookings(data.bookings, data.vehicles, session.role, session.id)
   const kpis = bookingKpis(bookings, data.payments.filter((payment) => bookings.some((booking) => booking.id === payment.bookingId)), data.users)
-  const earnings = earningsTotal(bookings, data.vehicles, data.users, data.settings, viewer)
-  const rate = session.shareRate ?? data.settings.defaultPartnerShare
+  const legacyEarnings = earningsTotal(bookings, data.vehicles, data.users, data.settings, viewer)
+  const partnerDb = partnerEarningsSummary(financial.earnings.data ?? [])
+  const earningsTotalValue =
+    fleetRole === 'partner' && isSupabaseProvider() && (financial.earnings.data?.length ?? 0) > 0
+      ? pesoFromCentavos(partnerDb.settledCentavos + partnerDb.payableCentavos + partnerDb.pendingCentavos)
+      : legacyEarnings.total
+  const earningsDelta = legacyEarnings.delta
+  const adminPackage = resolvePartnerDashboardPackage(session, data.vehicles, data.settings)
+  const partnerFixedShare = resolvePartnerFixedShare(session, data.settings)
   const bars = weeklyBars(bookings, data.vehicles, data.users, data.settings, viewer)
-  const base = role === 'owner' ? '/owner' : '/partner'
+  const base = '/partner'
   const today = manilaYmd()
   return (
     <div className="space-y-4">
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         <Kpi label="Total Bookings" value={String(kpis.totalBookings)} delta={kpis.bookingsDelta} icon={CalendarDays} tone="bg-blue-100 text-info" />
         <Kpi label="Active Rentals" value={String(bookings.filter((booking) => booking.status === 'ongoing').length)} delta={kpis.activeDelta} icon={CarFront} tone="bg-emerald-100 text-success" />
-        <Kpi label={role === 'partner' ? 'My Earnings (Share)' : 'My Earnings'} value={formatPeso(earnings.total)} delta={earnings.delta} icon={Coins} tone="bg-amber-100 text-amber-600" />
-        {role === 'partner' ? (
-          <Kpi label="Partner Share Rate" value={`${rate}%`} delta={0} icon={Percent} tone="bg-violet-100 text-violet-600" hint="Your agreed share per rental" />
-        ) : (
-          <Kpi label="Vehicle Utilization" value={`${utilization(vehicles, bookings)}%`} delta={0} icon={Clock3} tone="bg-violet-100 text-violet-600" />
-        )}
+        <Kpi label="My Earnings (Share)" value={formatPeso(earningsTotalValue)} delta={earningsDelta} icon={Coins} tone="bg-amber-100 text-amber-600" />
+        <PartnerRentalPackageCard package={adminPackage} fixedShare={partnerFixedShare} />
       </div>
+      {fleetRole === 'partner' ? (
+        <Panel>
+          <h2 className="font-bold">Customer rates (set by admin)</h2>
+          <p className="mb-3 text-xs text-muted">What renters see when booking your vehicles. Your earnings use your fixed share card above.</p>
+          <div className="grid gap-3 xl:grid-cols-2">
+            <RentalPackageRates
+              package={vehicles[0] ? resolveRentalPackage(vehicles[0], data.settings) : data.settings.defaultRentalPackage}
+              compact
+            />
+            <DriverPackageRates driverZone="inside" withDriver={false} days={2} package={data.settings.defaultDriverPackage} compact />
+          </div>
+        </Panel>
+      ) : null}
       <div className="grid gap-4 xl:grid-cols-2">
         <Panel>
           <div className="mb-3 flex items-center justify-between">
-            <h2 className="font-bold">{role === 'partner' ? `My Listed Vehicles (${vehicles.length})` : `My Vehicles (${vehicles.length})`}</h2>
-            <Button size="sm" onClick={() => navigate(`${base}/vehicles?new=1`)}><Plus className="h-4 w-4" /> {role === 'partner' ? 'List a Vehicle' : 'Add Vehicle'}</Button>
+            <h2 className="font-bold">{`My Listed Vehicles (${vehicles.length})`}</h2>
+            <Button size="sm" onClick={() => navigate(`${base}/vehicles?new=1`)}><Plus className="h-4 w-4" /> List a Vehicle</Button>
           </div>
           <div className="space-y-2">
             {vehicles.map((vehicle) => (
@@ -167,7 +189,7 @@ function FleetHome({ role }: { role: 'owner' | 'partner' }) {
           </div>
         </Panel>
         <Panel>
-          <h2 className="mb-3 font-bold">{role === 'partner' ? 'Vehicle Rental Calendar' : 'Rental Calendar'}</h2>
+          <h2 className="mb-3 font-bold">Vehicle Rental Calendar</h2>
           <div className="grid gap-3 md:grid-cols-2">
             <MiniCalendar marked={markedDays(bookings)} onPick={setDay} />
             <div className="space-y-2 text-sm">
@@ -183,12 +205,12 @@ function FleetHome({ role }: { role: 'owner' | 'partner' }) {
       <div className="grid gap-4 xl:grid-cols-2">
         <Panel>
           <div className="mb-3 flex items-center justify-between">
-            <h2 className="font-bold">{role === 'partner' ? 'Recent Reservations' : 'Recent Bookings'}</h2>
-            <button className="text-xs font-bold text-info" onClick={() => navigate(role === 'partner' ? '/partner/reservations' : '/owner/bookings')}>View all</button>
+            <h2 className="font-bold">Recent Reservations</h2>
+            <button className="text-xs font-bold text-info" onClick={() => navigate('/partner/reservations')}>View all</button>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full min-w-[640px] text-left text-sm">
-              <thead className="text-xs text-muted"><tr><th>Booking No.</th><th>Vehicle</th><th>Rental Period</th>{role === 'partner' ? <th>Partner Share</th> : <th>Amount</th>}<th>Status</th></tr></thead>
+              <thead className="text-xs text-muted"><tr><th>Booking No.</th><th>Vehicle</th><th>Rental Period</th><th>Partner Share</th><th>Status</th></tr></thead>
               <tbody>
                 {[...bookings].sort((a, b) => b.reference.localeCompare(a.reference)).slice(0, 5).map((booking) => {
                   const vehicle = data.vehicles.find((item) => item.id === booking.vehicleId)
@@ -198,7 +220,7 @@ function FleetHome({ role }: { role: 'owner' | 'partner' }) {
                       <td className="py-2 font-semibold">{booking.reference}</td>
                       <td>{vehicle?.model}</td>
                       <td>{formatPretty(booking.pickupDate)} – {formatPretty(booking.returnDate)}</td>
-                      <td className="font-semibold text-success">{formatPeso(role === 'partner' ? share : booking.pricing.total)}</td>
+                      <td className="font-semibold text-success">{formatPeso(share)}</td>
                       <td><StatusBadge value={booking.status} /></td>
                     </tr>
                   )
@@ -209,8 +231,8 @@ function FleetHome({ role }: { role: 'owner' | 'partner' }) {
         </Panel>
         <Panel>
           <h2 className="font-bold">Earnings Overview</h2>
-          <p className="text-3xl font-extrabold">{formatPeso(earnings.total)}</p>
-          <p className={cn('text-xs font-semibold', earnings.delta >= 0 ? 'text-success' : 'text-danger')}>{earnings.delta >= 0 ? '+' : ''}{earnings.delta}% vs. previous 30 days</p>
+          <p className="text-3xl font-extrabold">{formatPeso(earningsTotalValue)}</p>
+          <p className={cn('text-xs font-semibold', earningsDelta >= 0 ? 'text-success' : 'text-danger')}>{earningsDelta >= 0 ? '+' : ''}{earningsDelta}% vs. previous 30 days</p>
           <div className="h-48">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={bars}><XAxis dataKey="label" tick={{ fontSize: 11 }} /><YAxis tick={{ fontSize: 11 }} /><Tooltip /><Bar dataKey="value" fill="#ffc400" radius={6} /></BarChart>
@@ -269,6 +291,47 @@ export function CustomerHome() {
         </Panel>
       </div>
     </div>
+  )
+}
+
+function PartnerRentalPackageCard({ package: rates, fixedShare }: { package: RentalPackage; fixedShare: RentalPackage }) {
+  return (
+    <Panel>
+      <span className="grid h-10 w-10 place-items-center rounded-xl bg-canvas text-navy">
+        <Tags className="h-5 w-5" />
+      </span>
+      <p className="mt-3 text-sm text-muted">Customer rates</p>
+      <ul className="mt-2 space-y-1 text-sm">
+        <li className="flex items-baseline justify-between gap-2">
+          <span className="text-muted">1 day</span>
+          <span className="font-extrabold text-ink">{formatPeso(rates.rateFirstDay)}</span>
+        </li>
+        <li className="flex items-baseline justify-between gap-2">
+          <span className="text-muted">2–5 days</span>
+          <span className="font-extrabold text-ink">{formatPeso(rates.rateSucceeding)}</span>
+        </li>
+        <li className="flex items-baseline justify-between gap-2">
+          <span className="text-muted">10+ days</span>
+          <span className="font-extrabold text-ink">{formatPeso(rates.rate10Days)}</span>
+        </li>
+      </ul>
+      <p className="mt-3 text-sm text-muted">Your fixed share</p>
+      <ul className="mt-1 space-y-1 text-sm">
+        <li className="flex items-baseline justify-between gap-2">
+          <span className="text-muted">1 day</span>
+          <span className="font-extrabold text-success">{formatPeso(fixedShare.rateFirstDay)}</span>
+        </li>
+        <li className="flex items-baseline justify-between gap-2">
+          <span className="text-muted">2–5 days</span>
+          <span className="font-extrabold text-success">{formatPeso(fixedShare.rateSucceeding)}</span>
+        </li>
+        <li className="flex items-baseline justify-between gap-2">
+          <span className="text-muted">10+ days</span>
+          <span className="font-extrabold text-success">{formatPeso(fixedShare.rate10Days)}</span>
+        </li>
+      </ul>
+      <p className="mt-2 text-xs text-muted">Set by Drive Moko admin</p>
+    </Panel>
   )
 }
 

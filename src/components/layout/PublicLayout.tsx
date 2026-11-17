@@ -49,23 +49,34 @@ export function PublicLayout() {
           </nav>
           <div className="ml-auto hidden items-center gap-2 lg:flex">
             {session ? (
-              <Dropdown.Root>
-                <Dropdown.Trigger className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-navy-2 px-3 py-2 text-sm font-semibold">
+              <>
+                <Link
+                  to={homeForRole(session.role)}
+                  className="inline-flex items-center gap-2 rounded-full border-2 border-white bg-white px-4 py-2 text-sm font-bold text-navy shadow-md hover:bg-gold hover:border-gold"
+                >
                   <UserRound className="h-4 w-4" />
-                  {session.name.split(' ')[0]}
-                  <ChevronDown className="h-4 w-4" />
-                </Dropdown.Trigger>
-                <Dropdown.Portal>
-                  <Dropdown.Content className="z-50 min-w-44 rounded-xl bg-white p-1 text-ink shadow-xl">
-                    <Dropdown.Item className="cursor-pointer rounded-lg px-3 py-2 text-sm outline-none hover:bg-canvas" onSelect={() => navigate(homeForRole(session.role))}>
-                      Dashboard
-                    </Dropdown.Item>
-                    <Dropdown.Item className="cursor-pointer rounded-lg px-3 py-2 text-sm outline-none hover:bg-canvas" onSelect={() => actions.logout()}>
-                      Log out
-                    </Dropdown.Item>
-                  </Dropdown.Content>
-                </Dropdown.Portal>
-              </Dropdown.Root>
+                  Dashboard
+                </Link>
+                <Dropdown.Root>
+                  <Dropdown.Trigger className="inline-flex items-center gap-1.5 rounded-full border border-white/30 bg-white/15 px-3 py-2 text-sm font-semibold text-white hover:bg-white/25">
+                    {session.name.split(' ')[0]}
+                    <ChevronDown className="h-4 w-4" />
+                  </Dropdown.Trigger>
+                  <Dropdown.Portal>
+                    <Dropdown.Content className="z-50 min-w-44 rounded-xl bg-white p-1 text-ink shadow-xl">
+                      <Dropdown.Item
+                        className="cursor-pointer rounded-lg px-3 py-2 text-sm outline-none hover:bg-canvas"
+                        onSelect={() => navigate(homeForRole(session.role))}
+                      >
+                        Open dashboard
+                      </Dropdown.Item>
+                      <Dropdown.Item className="cursor-pointer rounded-lg px-3 py-2 text-sm outline-none hover:bg-canvas" onSelect={() => actions.logout()}>
+                        Log out
+                      </Dropdown.Item>
+                    </Dropdown.Content>
+                  </Dropdown.Portal>
+                </Dropdown.Root>
+              </>
             ) : (
               <NavLink to="/login" className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-navy-2 px-4 py-2 text-sm font-semibold">
                 <UserRound className="h-4 w-4" />
@@ -89,7 +100,14 @@ export function PublicLayout() {
               </NavLink>
             ))}
             <div className="grid grid-cols-2 gap-2 pt-2">
-              <Button variant="outline" className="bg-transparent text-white" onClick={() => { setOpen(false); navigate(session ? homeForRole(session.role) : '/login') }}>
+              <Button
+                className={session ? 'bg-white font-bold text-navy hover:bg-gold' : undefined}
+                variant={session ? 'primary' : 'outline'}
+                onClick={() => {
+                  setOpen(false)
+                  navigate(session ? homeForRole(session.role) : '/login')
+                }}
+              >
                 {session ? 'Dashboard' : 'Login'}
               </Button>
               <Button onClick={() => { setOpen(false); navigate('/cars') }}>Book a Car</Button>
@@ -121,13 +139,13 @@ export function PublicLayout() {
             </div>
           </div>
           <div>
-            <p className="font-bold">Demo notice</p>
+            <p className="font-bold">Support</p>
             <p className="mt-3 text-sm leading-6 text-white/70">
-              Photos, prices, reviews, phone numbers, and addresses in this demo are sample data. No payment, SMS, or identity document is sent anywhere.
+              For booking questions and fleet availability, contact Drive Moko during business hours. Rates and availability on this site reflect live inventory when connected to production.
             </p>
           </div>
         </div>
-        <div className="border-t border-white/10 py-4 text-center text-xs text-white/60">© {new Date().getFullYear()} {BRAND.name} {BRAND.line}. Demonstration only.</div>
+        <div className="border-t border-white/10 py-4 text-center text-xs text-white/60">© {new Date().getFullYear()} {BRAND.name} · {BRAND.company}. {BRAND.place}</div>
       </footer>
     </div>
   )

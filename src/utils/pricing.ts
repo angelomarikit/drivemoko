@@ -1,8 +1,9 @@
-import type { BookingAddons, PriceBreakdown, RentalType } from '@/types'
+import type { BookingAddons, DriverPackageSettings, PriceBreakdown, RentalPackage, RentalType } from '@/types'
+import { type DriverServiceZone, quoteDriverFee } from '@/utils/driverPackage'
+import { packageDailyRate } from '@/utils/rentalPackage'
 
 export const ADDON_RATES = {
   insurance: 300,
-  withDriver: 1500,
   childSeat: 200,
 } as const
 
@@ -13,16 +14,24 @@ export function rentalDayCount(pickupDate: string, returnDate: string) {
   return Math.max(diff, 1)
 }
 
-export function quote(
-  dailyRate: number,
+export function quotePackage(
+  pkg: RentalPackage,
   pickupDate: string,
   returnDate: string,
   rentalType: RentalType,
-  addons: BookingAddons,
+  addons: BookingAddons = emptyAddons(),
+  driverZone?: DriverServiceZone,
+  driverPkg?: DriverPackageSettings,
+  securityDepositAmount = 3000,
 ): PriceBreakdown {
   const days = rentalDayCount(pickupDate, returnDate)
-  const base = dailyRate * days
-  const driver = rentalType === 'with-driver' || addons.withDriver ? ADDON_RATES.withDriver * days : 0
+  let base = 0
+  for (let day = 1; day <= days; day++) {
+    base += packageDailyRate(pkg, day, days)
+  }
+  const dailyRate = days > 0 ? base / days : pkg.rateFirstDay
+  const driver =
+    rentalType === 'with-driver' && driverZone && driverPkg ? quoteDriverFee(days, driverZone, driverPkg) : 0
   const insurance = addons.insurance ? ADDON_RATES.insurance * days : 0
   const childSeat = addons.childSeat ? ADDON_RATES.childSeat * days : 0
   return {
@@ -32,7 +41,34 @@ export function quote(
     insurance,
     driver,
     childSeat,
-    total: base + insurance + driver + childSeat,
+    securityDeposit: securityDepositAmount,
+    total: base + insurance + driver + childSeat + securityDepositAmount,
+  }
+}
+
+/** @deprecated Use quotePackage with resolveRentalPackage — kept for flat-rate fallbacks. */
+export function quote(
+  dailyRate: number,
+  pickupDate: string,
+  returnDate: string,
+  rentalType: RentalType,
+  addons: BookingAddons,
+  securityDepositAmount = 3000,
+): PriceBreakdown {
+  const days = rentalDayCount(pickupDate, returnDate)
+  const base = dailyRate * days
+  const driver = 0
+  const insurance = addons.insurance ? ADDON_RATES.insurance * days : 0
+  const childSeat = addons.childSeat ? ADDON_RATES.childSeat * days : 0
+  return {
+    days,
+    dailyRate,
+    base,
+    insurance,
+    driver,
+    childSeat,
+    securityDeposit: securityDepositAmount,
+    total: base + insurance + driver + childSeat + securityDepositAmount,
   }
 }
 

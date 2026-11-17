@@ -1,5 +1,6 @@
 import type { Booking, BookingStatus, DemoData, MaintenanceWindow, RentalType, Vehicle } from '@/types'
 import { manilaTime, manilaYmd, rangesOverlap } from '@/utils/dates'
+import { isUuid } from '@/utils/vehicleParam'
 
 export const TRANSITIONS: Record<BookingStatus, BookingStatus[]> = {
   pending: ['confirmed', 'rejected', 'cancelled'],
@@ -61,6 +62,26 @@ export interface ScheduleInput {
   returnTime: string
   rentalType: RentalType
   ignoreBookingId?: string
+  customerId?: string
+}
+
+/** Same customer re-submitting after a partial success (e.g. contract upload retry). */
+export function findMatchingPendingBooking(
+  bookings: Booking[],
+  customerId: string,
+  input: Pick<ScheduleInput, 'vehicleId' | 'pickupDate' | 'returnDate' | 'pickupTime' | 'returnTime'>,
+) {
+  return bookings.find(
+    (booking) =>
+      isUuid(booking.id) &&
+      booking.customerId === customerId &&
+      booking.status === 'pending' &&
+      booking.vehicleId === input.vehicleId &&
+      booking.pickupDate === input.pickupDate &&
+      booking.returnDate === input.returnDate &&
+      booking.pickupTime === input.pickupTime &&
+      booking.returnTime === input.returnTime,
+  )
 }
 
 export function scheduleIssues(input: ScheduleInput, data: Pick<DemoData, 'vehicles' | 'bookings' | 'maintenance' | 'settings'>) {
@@ -72,9 +93,6 @@ export function scheduleIssues(input: ScheduleInput, data: Pick<DemoData, 'vehic
   }
   if (!vehicle.listingActive || vehicle.listingStatus === 'archived' || vehicle.listingStatus === 'rejected') {
     issues.push('This vehicle is not available for booking.')
-  }
-  if (!vehicle.offeredRentalTypes.includes(input.rentalType)) {
-    issues.push('This rental type is not offered for the selected vehicle.')
   }
   const today = manilaYmd()
   if (!input.pickupDate || !input.returnDate) {
@@ -97,7 +115,15 @@ export function scheduleIssues(input: ScheduleInput, data: Pick<DemoData, 'vehic
     data.settings.holdPendingBookings,
     input.ignoreBookingId,
   )
-  if (clash) issues.push(`Those dates overlap ${clash.reference}.`)
+  if (clash) {
+    if (input.customerId && clash.customerId === input.customerId && clash.status === 'pending') {
+      issues.push(
+        `You already have pending booking ${clash.reference} for these dates. Open My Bookings or submit again to finish that request.`,
+      )
+    } else {
+      issues.push(`Those dates overlap ${clash.reference}.`)
+    }
+  }
   const maintenance = data.maintenance.find(
     (window) => window.vehicleId === vehicle.id && maintenanceOverlaps(input.pickupDate, input.returnDate, window),
   )
@@ -107,7 +133,7 @@ export function scheduleIssues(input: ScheduleInput, data: Pick<DemoData, 'vehic
 
 export function homeForRole(role: string) {
   if (role === 'admin') return '/admin'
-  if (role === 'owner') return '/owner'
+  if (role === 'owner') return '/partner'
   if (role === 'partner') return '/partner'
   return '/customer'
 }

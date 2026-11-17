@@ -180,7 +180,7 @@ export function CarsPage() {
                 return (
                   <article key={vehicle.id} className="overflow-hidden rounded-2xl bg-white shadow-sm">
                     <div className="relative">
-                      <VehicleImage src={vehicle.images[0]} alt={`Demo photo of ${vehicle.name}`} className="h-40 w-full" />
+                      <VehicleImage src={vehicle.images[0]} alt={vehicle.name} className="h-40 w-full" />
                       <span className="absolute left-3 top-3"><StatusBadge value={bookable ? 'available' : 'unavailable'} /></span>
                       <button
                         type="button"

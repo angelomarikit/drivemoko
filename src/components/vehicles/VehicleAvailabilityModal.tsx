@@ -17,7 +17,7 @@ export function VehicleAvailabilityModal({
       open={open}
       onClose={onClose}
       title={`${vehicle.name} availability`}
-      description="Green days are open for booking. Orange and yellow show reserved dates in this demo."
+      description="Green days are open for booking. Other colors show pending, confirmed, or blocked dates."
     >
       <VehicleAvailabilityCalendar vehicleId={vehicle.id} />
     </Modal>

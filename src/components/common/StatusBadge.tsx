@@ -42,7 +42,7 @@ const labels: Record<string, string> = {
   unpaid: 'Unpaid',
   partial: 'Partial',
   verified: 'Verified',
-  simulated: 'Simulated',
+  simulated: 'Preview',
 }
 
 export function StatusBadge({ value, solid = false }: { value: string; solid?: boolean }) {

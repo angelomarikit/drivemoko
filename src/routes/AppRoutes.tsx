@@ -2,6 +2,7 @@ import {
   BarChart3,
   CalendarDays,
   CarFront,
+  Tags,
   Heart,
   LayoutDashboard,
   MessageSquare,
@@ -13,9 +14,17 @@ import type { ReactNode } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { DashboardLayout, type DashLink } from '@/components/layout/DashboardLayout'
 import { PublicLayout } from '@/components/layout/PublicLayout'
-import { useHydrated, useSession, useSnapshot } from '@/hooks/useDemo'
-import { ForgotPasswordPage, LoginPage, RegisterPage } from '@/pages/auth/AuthPages'
-import { AdminHome, CustomerHome, OwnerHome, PartnerHome } from '@/pages/dashboards/Homes'
+import { useAppReady, useSession, useSnapshot } from '@/hooks/useDemo'
+import { isSupabaseProvider } from '@/lib/config'
+import {
+  AuthCallbackPage,
+  ForgotPasswordPage,
+  LoginPage,
+  RegisterPage,
+  ResetPasswordPage,
+  VerifyEmailNoticePage,
+} from '@/pages/auth/AuthPages'
+import { AdminHome, CustomerHome, PartnerHome } from '@/pages/dashboards/Homes'
 import {
   BookingsBoard,
   CalendarBoard,
@@ -24,12 +33,16 @@ import {
   PaymentsBoard,
   PeopleBoard,
   ProfileBoard,
+  RentalPackagesBoard,
   ReportsBoard,
+  SettlementsBoard,
   SettingsBoard,
   SmsBoard,
   StatementsBoard,
   VehiclesBoard,
 } from '@/pages/dashboards/Manage'
+import { PartnersBoard } from '@/pages/dashboards/PartnersBoard'
+import { RegisterPartnerPage } from '@/pages/dashboards/RegisterPartner'
 import { AboutPage, ContactPage, HowItWorksPage, PartnerPage } from '@/pages/public/InfoPages'
 import { BookingPage } from '@/pages/public/BookingPage'
 import { CarsPage } from '@/pages/public/CarsPage'
@@ -39,21 +52,37 @@ import type { Role } from '@/types'
 import { homeForRole } from '@/utils/bookingRules'
 
 function Splash() {
-  return <div className="grid min-h-screen place-items-center bg-navy text-white">Loading Drive Moko demo…</div>
+  return (
+    <div className="grid min-h-screen place-items-center bg-navy text-white">Loading Drive Moko…</div>
+  )
 }
 
 function Guard({ role, children }: { role: Role; children: ReactNode }) {
-  const hydrated = useHydrated()
+  const ready = useAppReady()
   const session = useSession()
-  if (!hydrated) return <Splash />
+  if (!ready) return <Splash />
   if (!session) return <Navigate to="/login" replace />
+  if (session.status === 'suspended') return <Navigate to="/login" replace />
   if (session.role !== role) return <Navigate to={homeForRole(session.role)} replace />
   return children
 }
 
+/** Links / Partner area — legacy `owner` profiles are routed here after login. */
+function PartnerGuard({ children }: { children: ReactNode }) {
+  const ready = useAppReady()
+  const session = useSession()
+  if (!ready) return <Splash />
+  if (!session) return <Navigate to="/login" replace />
+  if (session.status === 'suspended') return <Navigate to="/login" replace />
+  if (session.role !== 'partner' && session.role !== 'owner') {
+    return <Navigate to={homeForRole(session.role)} replace />
+  }
+  return children
+}
+
 export function AppRoutes() {
-  const hydrated = useHydrated()
-  if (!hydrated) return <Splash />
+  const ready = useAppReady()
+  if (!ready) return <Splash />
   return (
     <Routes>
       <Route element={<PublicLayout />}>
@@ -69,29 +98,27 @@ export function AppRoutes() {
       <Route path="login" element={<LoginPage />} />
       <Route path="register" element={<RegisterPage />} />
       <Route path="forgot-password" element={<ForgotPasswordPage />} />
+      <Route path="auth/callback" element={<AuthCallbackPage />} />
+      <Route path="auth/reset-password" element={<ResetPasswordPage />} />
+      <Route path="auth/verify" element={<VerifyEmailNoticePage />} />
       <Route path="admin" element={<Guard role="admin"><AdminShell /></Guard>}>
         <Route index element={<AdminHome />} />
         <Route path="bookings" element={<BookingsBoard mode="admin" />} />
         <Route path="vehicles" element={<VehiclesBoard mode="admin" />} />
         <Route path="calendar" element={<CalendarBoard mode="admin" />} />
-        <Route path="owners" element={<PeopleBoard kind="owners" />} />
-        <Route path="partners" element={<PeopleBoard kind="partners" />} />
-        <Route path="customers" element={<PeopleBoard kind="customers" />} />
+        <Route path="partners" element={<PartnersBoard />} />
+        <Route path="partners/register" element={<RegisterPartnerPage />} />
+        <Route path="customers" element={<PeopleBoard />} />
         <Route path="payments" element={<PaymentsBoard />} />
         <Route path="reports" element={<ReportsBoard mode="admin" />} />
+        <Route path="settlements" element={<SettlementsBoard />} />
         <Route path="sms" element={<SmsBoard />} />
+        <Route path="rental-packages" element={<RentalPackagesBoard />} />
         <Route path="settings" element={<SettingsBoard />} />
       </Route>
-      <Route path="owner" element={<Guard role="owner"><OwnerShell /></Guard>}>
-        <Route index element={<OwnerHome />} />
-        <Route path="vehicles" element={<VehiclesBoard mode="owner" />} />
-        <Route path="bookings" element={<BookingsBoard mode="owner" />} />
-        <Route path="calendar" element={<CalendarBoard mode="owner" />} />
-        <Route path="earnings" element={<ReportsBoard mode="owner" />} />
-        <Route path="reports" element={<ReportsBoard mode="owner" />} />
-        <Route path="settings" element={<ProfileBoard />} />
-      </Route>
-      <Route path="partner" element={<Guard role="partner"><PartnerShell /></Guard>}>
+      <Route path="owner/*" element={<Navigate to="/partner" replace />} />
+      <Route path="admin/owners/*" element={<Navigate to="/admin/partners" replace />} />
+      <Route path="partner" element={<PartnerGuard><PartnerShell /></PartnerGuard>}>
         <Route index element={<PartnerHome />} />
         <Route path="vehicles" element={<VehiclesBoard mode="partner" />} />
         <Route path="reservations" element={<BookingsBoard mode="partner" />} />
@@ -107,7 +134,7 @@ export function AppRoutes() {
         <Route path="notifications" element={<CustomerNotes />} />
         <Route path="profile" element={<ProfileBoard />} />
       </Route>
-      <Route path="*" element={<div className="grid min-h-screen place-items-center">That page is not in the demo. <a className="ml-2 font-bold" href="/">Go home</a></div>} />
+      <Route path="*" element={<div className="grid min-h-screen place-items-center">Page not found. <a className="ml-2 font-bold" href="/">Go home</a></div>} />
     </Routes>
   )
 }
@@ -117,32 +144,19 @@ function AdminShell() {
   const pending = data?.bookings.filter((booking) => booking.status === 'pending').length ?? 0
   const links: DashLink[] = [
     { to: '/admin', label: 'Dashboard', icon: LayoutDashboard, end: true },
-    { to: '/admin/bookings', label: 'Bookings', icon: CalendarDays, badge: pending, children: [{ to: '/admin/bookings?status=pending', label: 'Pending' }, { to: '/admin/bookings', label: 'All bookings' }] },
-    { to: '/admin/vehicles', label: 'Vehicles', icon: CarFront, children: [{ to: '/admin/vehicles', label: 'Inventory' }, { to: '/admin/vehicles?new=1', label: 'Add vehicle' }] },
+    { to: '/admin/bookings', label: 'Bookings', icon: CalendarDays, badge: pending },
+    { to: '/admin/vehicles', label: 'Vehicles', icon: CarFront },
+    { to: '/admin/rental-packages', label: 'Rental packages', icon: Tags },
     { to: '/admin/calendar', label: 'Calendar', icon: CalendarDays },
-    { to: '/admin/owners', label: 'Car Owners', icon: Users },
     { to: '/admin/partners', label: 'Links / Partners', icon: Users },
     { to: '/admin/customers', label: 'Customers', icon: Users },
     { to: '/admin/payments', label: 'Payments', icon: WalletCards },
     { to: '/admin/reports', label: 'Reports', icon: BarChart3 },
+    { to: '/admin/settlements', label: 'Settlements', icon: WalletCards },
     { to: '/admin/sms', label: 'SMS Notifications', icon: MessageSquare },
     { to: '/admin/settings', label: 'Settings', icon: Settings },
   ]
   return <DashboardLayout title="Main Administration Dashboard" subtitle="Manage your car rental operations, bookings, vehicles, and partners." links={links} />
-}
-
-function OwnerShell() {
-  const session = useSession()
-  const links: DashLink[] = [
-    { to: '/owner', label: 'My Dashboard', icon: LayoutDashboard, end: true },
-    { to: '/owner/vehicles', label: 'My Vehicles', icon: CarFront },
-    { to: '/owner/bookings', label: 'Bookings', icon: CalendarDays },
-    { to: '/owner/calendar', label: 'Calendar', icon: CalendarDays },
-    { to: '/owner/earnings', label: 'Earnings', icon: WalletCards },
-    { to: '/owner/reports', label: 'Reports', icon: BarChart3 },
-    { to: '/owner/settings', label: 'Profile & Settings', icon: Settings },
-  ]
-  return <DashboardLayout title="Car Owner Dashboard" subtitle={`Welcome back, ${session?.name.split(' ')[0] ?? 'there'}! Manage your vehicles, bookings, and earnings.`} links={links} />
 }
 
 function PartnerShell() {

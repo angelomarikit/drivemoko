@@ -13,26 +13,52 @@ import {
 } from '@tanstack/react-table'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useForm } from 'react-hook-form'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import { Bar, BarChart, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { z } from 'zod'
+import { BookingContractDownload } from '@/components/bookings/BookingContractDownload'
 import { StatusBadge } from '@/components/common/StatusBadge'
 import { VehicleImage } from '@/components/common/VehicleImage'
+import { VehicleVideo } from '@/components/common/VehicleVideo'
 import { Panel } from '@/components/layout/DashboardLayout'
 import { Button } from '@/components/ui/Button'
+import { FileUploadButton } from '@/components/ui/FileUploadButton'
 import { DateField, ErrorText, FieldLabel, SelectInput, TextArea, TextInput } from '@/components/ui/Fields'
 import { Modal } from '@/components/ui/Modal'
+import { useFinancial } from '@/hooks/useFinancial'
 import { useDemoActions, useSession, useSnapshot } from '@/hooks/useDemo'
+import { isSupabaseProvider } from '@/lib/config'
+import { DEFAULT_SETTINGS } from '@/services/supabase/defaults'
+import { pesoFromCentavos } from '@/services/supabase/financial'
+import { IMAGE_ACCEPT, VIDEO_ACCEPT } from '@/lib/storage/buckets'
+import { uploadVehiclePhoto } from '@/services/storage/vehicleImages'
+import { uploadVehiclePromoVideo } from '@/services/storage/vehicleVideo'
 import { useUiStore } from '@/stores/uiStore'
-import type { Booking, BookingStatus, PaymentMethod, Role, User, Vehicle, VehicleCategory } from '@/types'
+import type { Booking, BookingStatus, PaymentMethod, RentalType, Role, User, Vehicle, VehicleCategory } from '@/types'
 import { canTransition, isPubliclyBookable } from '@/utils/bookingRules'
 import { cn } from '@/utils/cn'
 import { addDays, formatPretty, manilaYmd } from '@/utils/dates'
-import { fileToResizedDataUrl, downloadCsv } from '@/utils/files'
+import { fileToDataUrl, fileToResizedDataUrl, downloadCsv } from '@/utils/files'
+import {
+  businessSharePesos,
+  cancellationsInRange,
+  dailyRevenueSeries,
+  outstandingReceivables,
+  partnerEarningsSummary,
+  revenueByVehicle,
+  verifiedRevenueInRange,
+} from '@/utils/financialReports'
 import { earningsTotal, scopedBookings, scopedVehicles, shareAmount, statusCounts, utilization } from '@/utils/metrics'
 import { formatPeso } from '@/utils/money'
+import { RentalOpsPanel } from '@/components/rentals/RentalOpsPanel'
+import { DriverPackageEditor } from '@/components/admin/DriverPackageEditor'
+import { RentalPackageEditor } from '@/components/admin/RentalPackageEditor'
+import { RentalPackageRates } from '@/components/rentals/RentalPackageRates'
 import { emptyAddons } from '@/utils/pricing'
+import { DEFAULT_PARTNER_FIXED_SHARE, resolvePartnerFixedShare } from '@/utils/partnerShare'
+import { DEFAULT_RENTAL_PACKAGE, resolveRentalPackage } from '@/utils/rentalPackage'
+import type { PartnerAdminInput, RentalPackage } from '@/types'
 
 const vehicleSchema = z.object({
   name: z.string().min(2),
@@ -44,6 +70,10 @@ const vehicleSchema = z.object({
   transmission: z.enum(['Automatic', 'Manual']),
   fuel: z.enum(['Diesel', 'Gasoline']),
   pricePerDay: z.coerce.number().min(500),
+  rateFirstDay: z.coerce.number().min(500),
+  rateSucceeding: z.coerce.number().min(500),
+  rate10Days: z.coerce.number().min(500),
+  rate15Plus: z.coerce.number().min(500),
   plateNumber: z.string().min(2),
   description: z.string().min(10),
   ownerId: z.string().optional(),
@@ -81,6 +111,19 @@ export function BookingsBoard({ mode }: { mode: Role }) {
       vehicleId: vehicleId ?? current.vehicleId,
     }))
   }, [params])
+  const columns = useMemo<ColumnDef<Booking>[]>(() => {
+    if (!data) return []
+    return [
+      { accessorKey: 'reference', header: 'Booking No.' },
+      { id: 'customer', header: 'Customer', cell: ({ row }) => data.users.find((user) => user.id === row.original.customerId)?.name },
+      { id: 'vehicle', header: 'Vehicle', cell: ({ row }) => data.vehicles.find((vehicle) => vehicle.id === row.original.vehicleId)?.name },
+      { id: 'period', header: 'Rental Period', cell: ({ row }) => `${formatPretty(row.original.pickupDate)} – ${formatPretty(row.original.returnDate)}` },
+      { id: 'amount', header: 'Amount', cell: ({ row }) => formatPeso(row.original.pricing.total) },
+      { accessorKey: 'status', header: 'Status', cell: ({ getValue }) => <StatusBadge value={String(getValue())} /> },
+      { accessorKey: 'paymentStatus', header: 'Payment', cell: ({ getValue }) => <StatusBadge value={String(getValue())} /> },
+      { id: 'actions', header: '', cell: ({ row }) => <button className="text-xs font-bold text-info" onClick={() => setParams({ open: row.original.id })}>View</button> },
+    ]
+  }, [data, setParams])
   if (!data || !session) return null
   const rows = scopedBookings(data.bookings, data.vehicles, mode, session.id).filter((booking) => {
     const vehicle = data.vehicles.find((item) => item.id === booking.vehicleId)
@@ -90,16 +133,6 @@ export function BookingsBoard({ mode }: { mode: Role }) {
   })
   const openId = params.get('open')
   const opened = data.bookings.find((booking) => booking.id === openId) ?? null
-  const columns = useMemo<ColumnDef<Booking>[]>(() => [
-    { accessorKey: 'reference', header: 'Booking No.' },
-    { id: 'customer', header: 'Customer', cell: ({ row }) => data.users.find((user) => user.id === row.original.customerId)?.name },
-    { id: 'vehicle', header: 'Vehicle', cell: ({ row }) => data.vehicles.find((vehicle) => vehicle.id === row.original.vehicleId)?.name },
-    { id: 'period', header: 'Rental Period', cell: ({ row }) => `${formatPretty(row.original.pickupDate)} – ${formatPretty(row.original.returnDate)}` },
-    { id: 'amount', header: 'Amount', cell: ({ row }) => formatPeso(row.original.pricing.total) },
-    { accessorKey: 'status', header: 'Status', cell: ({ getValue }) => <StatusBadge value={String(getValue())} /> },
-    { accessorKey: 'paymentStatus', header: 'Payment', cell: ({ getValue }) => <StatusBadge value={String(getValue())} /> },
-    { id: 'actions', header: '', cell: ({ row }) => <button className="text-xs font-bold text-info" onClick={() => setParams({ open: row.original.id })}>View</button> },
-  ], [data.users, data.vehicles, setParams])
 
   return (
     <Panel>
@@ -159,7 +192,6 @@ function BookingDetail({ booking, mode }: { booking: Booking; mode: Role }) {
   if (!data) return null
   const vehicle = data.vehicles.find((item) => item.id === booking.vehicleId)
   const customer = data.users.find((user) => user.id === booking.customerId)
-  const owner = data.users.find((user) => user.id === vehicle?.ownerId)
   const partner = data.users.find((user) => user.id === vehicle?.partnerId)
   const payments = data.payments.filter((payment) => payment.bookingId === booking.id)
   const act = (status: BookingStatus) => {
@@ -172,13 +204,25 @@ function BookingDetail({ booking, mode }: { booking: Booking; mode: Role }) {
       <div className="space-y-1">
         <p><strong>Customer:</strong> {customer?.name} · {customer?.phone}</p>
         <p><strong>Vehicle:</strong> {vehicle?.name} · {vehicle?.plateNumber}</p>
-        <p><strong>Owner:</strong> {owner?.name ?? 'Company fleet'}</p>
-        <p><strong>Partner:</strong> {partner?.name ?? 'None'}</p>
+        <p><strong>Partner / link:</strong> {partner?.name ?? 'Company fleet'}</p>
         <p><strong>Schedule:</strong> {formatPretty(booking.pickupDate)} {booking.pickupTime} – {formatPretty(booking.returnDate)} {booking.returnTime}</p>
         <p><strong>Type:</strong> {booking.rentalType}</p>
         <p><strong>Total:</strong> {formatPeso(booking.pricing.total)} · <StatusBadge value={booking.paymentStatus} /></p>
         <p><strong>Notes:</strong> {booking.notes || 'None'}</p>
         {booking.specialRequest ? <p><strong>Request:</strong> {booking.specialRequest}</p> : null}
+        {mode === 'admin' && booking.contractStoragePath ? (
+          <div className="mt-3 space-y-1">
+            <BookingContractDownload booking={booking} />
+            {booking.contractSignerName ? (
+              <p className="text-xs text-muted">
+                Signed by {booking.contractSignerName}
+                {booking.contractSignedAt
+                  ? ` · ${new Intl.DateTimeFormat('en-PH', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Manila' }).format(new Date(booking.contractSignedAt))}`
+                  : null}
+              </p>
+            ) : null}
+          </div>
+        ) : null}
       </div>
       <div>
         <p className="font-bold">History</p>
@@ -198,11 +242,12 @@ function BookingDetail({ booking, mode }: { booking: Booking; mode: Role }) {
         </div>
       </div>
       <PaymentDialog open={payOpen} onClose={() => setPayOpen(false)} bookingId={booking.id} />
+      {mode === 'admin' ? <RentalOpsPanel booking={booking} mode={mode} /> : null}
     </div>
   )
 }
 
-export function VehiclesBoard({ mode }: { mode: 'admin' | 'owner' | 'partner' }) {
+export function VehiclesBoard({ mode }: { mode: 'admin' | 'partner' }) {
   const { data } = useSnapshot()
   const session = useSession()
   const actions = useDemoActions()
@@ -220,7 +265,7 @@ export function VehiclesBoard({ mode }: { mode: 'admin' | 'owner' | 'partner' })
       </div>
       <div className="overflow-x-auto">
         <table className="w-full min-w-[760px] text-left text-sm">
-          <thead className="text-xs text-muted"><tr><th>Vehicle</th><th>Type</th><th>Rate</th><th>Listing</th><th>Owner</th><th></th></tr></thead>
+          <thead className="text-xs text-muted"><tr><th>Vehicle</th><th>Type</th><th>Rate</th><th>Listing</th><th>Partner</th><th></th></tr></thead>
           <tbody>
             {vehicles.map((vehicle) => (
               <tr key={vehicle.id} className="border-t">
@@ -228,12 +273,43 @@ export function VehiclesBoard({ mode }: { mode: 'admin' | 'owner' | 'partner' })
                 <td>{vehicle.category} · {vehicle.seats}</td>
                 <td>{formatPeso(vehicle.pricePerDay)}</td>
                 <td><StatusBadge value={vehicle.listingStatus} /></td>
-                <td>{data.users.find((user) => user.id === vehicle.ownerId)?.name ?? 'Fleet'}</td>
-                <td className="space-x-2 text-xs font-bold">
-                  <button className="text-info" onClick={() => setEditing(vehicle)}>Edit</button>
-                  <button onClick={() => setBlockFor(vehicle.id)}>Block dates</button>
-                  {mode === 'admin' ? <button className="text-danger" onClick={() => ask({ title: 'Archive vehicle?', message: `${vehicle.name} will leave the public catalog.`, confirmLabel: 'Archive', tone: 'danger', onConfirm: () => actions.archiveVehicle(vehicle.id) })}>Archive</button> : null}
-                  {mode === 'admin' && vehicle.listingStatus === 'pending' ? <button className="text-success" onClick={() => actions.updateVehicle(vehicle.id, { listingStatus: 'approved', listingActive: true })}>Approve</button> : null}
+                <td>{data.users.find((user) => user.id === vehicle.partnerId)?.name ?? 'Company fleet'}</td>
+                <td className="py-2">
+                  <div className="flex flex-wrap justify-end gap-2">
+                    <Button type="button" variant="outline" size="sm" onClick={() => setEditing(vehicle)}>
+                      Edit
+                    </Button>
+                    <Button type="button" variant="soft" size="sm" onClick={() => setBlockFor(vehicle.id)}>
+                      Block dates
+                    </Button>
+                    {mode === 'admin' ? (
+                      <Button
+                        type="button"
+                        variant="danger"
+                        size="sm"
+                        onClick={() =>
+                          ask({
+                            title: 'Archive vehicle?',
+                            message: `${vehicle.name} will leave the public catalog.`,
+                            confirmLabel: 'Archive',
+                            tone: 'danger',
+                            onConfirm: () => actions.archiveVehicle(vehicle.id),
+                          })
+                        }
+                      >
+                        Archive
+                      </Button>
+                    ) : null}
+                    {mode === 'admin' && vehicle.listingStatus === 'pending' ? (
+                      <Button
+                        type="button"
+                        size="sm"
+                        onClick={() => actions.updateVehicle(vehicle.id, { listingStatus: 'approved', listingActive: true })}
+                      >
+                        Approve
+                      </Button>
+                    ) : null}
+                  </div>
                 </td>
               </tr>
             ))}
@@ -251,6 +327,16 @@ function VehicleDialog({ vehicle, onClose, mode }: { vehicle: Vehicle | 'new' | 
   const actions = useDemoActions()
   const current = vehicle && vehicle !== 'new' ? vehicle : null
   const [images, setImages] = useState<string[]>(current?.images ?? [])
+  const [pendingFiles, setPendingFiles] = useState<File[]>([])
+  const [promoVideo, setPromoVideo] = useState<string | undefined>(current?.promoVideo)
+  const [pendingVideoFile, setPendingVideoFile] = useState<File | null>(null)
+  const [localVideoPreview, setLocalVideoPreview] = useState<string | undefined>()
+  const supabaseMode = isSupabaseProvider()
+  const settings = data?.settings ?? DEFAULT_SETTINGS
+  const defaultPkg = resolveRentalPackage(
+    current ?? ({ pricePerDay: 3000 } as Vehicle),
+    settings,
+  )
   const form = useForm<VehicleForm>({
     resolver: zodResolver(vehicleSchema),
     defaultValues: {
@@ -262,10 +348,13 @@ function VehicleDialog({ vehicle, onClose, mode }: { vehicle: Vehicle | 'new' | 
       seats: current?.seats ?? 5,
       transmission: current?.transmission ?? 'Automatic',
       fuel: current?.fuel ?? 'Gasoline',
-      pricePerDay: current?.pricePerDay ?? 3000,
+      pricePerDay: current?.pricePerDay ?? defaultPkg.rateFirstDay,
+      rateFirstDay: current?.rentalPackage?.rateFirstDay ?? defaultPkg.rateFirstDay,
+      rateSucceeding: current?.rentalPackage?.rateSucceeding ?? defaultPkg.rateSucceeding,
+      rate10Days: current?.rentalPackage?.rate10Days ?? defaultPkg.rate10Days,
+      rate15Plus: current?.rentalPackage?.rate15Plus ?? defaultPkg.rate15Plus,
       plateNumber: current?.plateNumber ?? '',
-      description: current?.description ?? 'Demonstration vehicle prepared for the Drive Moko catalog.',
-      ownerId: current?.ownerId ?? '',
+      description: current?.description ?? '',
       partnerId: current?.partnerId ?? '',
       listingStatus: current?.listingStatus ?? (mode === 'admin' ? 'approved' : 'pending'),
       listingActive: current?.listingActive ?? mode === 'admin',
@@ -279,17 +368,57 @@ function VehicleDialog({ vehicle, onClose, mode }: { vehicle: Vehicle | 'new' | 
   return (
     <Modal open={!!vehicle} onClose={onClose} title={current ? 'Edit vehicle' : 'Add vehicle'} wide>
       <form className="grid gap-3 md:grid-cols-2" onSubmit={form.handleSubmit(async (values) => {
+        const rentalPackage: RentalPackage | undefined =
+          mode === 'admin'
+            ? {
+                rateFirstDay: Number(values.rateFirstDay),
+                rateSucceeding: Number(values.rateSucceeding),
+                rate10Days: Number(values.rate10Days),
+                rate15Plus: Number(values.rate15Plus),
+              }
+            : undefined
         const payload = {
           ...values,
-          ownerId: values.ownerId || null,
+          pricePerDay:
+            mode === 'admin' && rentalPackage ? rentalPackage.rateFirstDay : Number(values.pricePerDay),
+          ...(rentalPackage ? { rentalPackage } : {}),
+          ownerId: null,
           partnerId: values.partnerId || null,
           images: images.length ? images : ['/vehicles/fortuner.jpg'],
           features: values.features.split(',').map((item) => item.trim()).filter(Boolean),
           inclusions: current?.inclusions ?? ['Well-maintained vehicle', 'Basic insurance coverage', '24/7 booking support'],
-          offeredRentalTypes: [values.selfDrive ? 'self-drive' as const : null, values.withDriver ? 'with-driver' as const : null].filter((item): item is 'self-drive' | 'with-driver' => !!item),
+          offeredRentalTypes: ['self-drive', 'with-driver'] as RentalType[],
           category: values.category as VehicleCategory,
+          ...(promoVideo !== undefined ? { promoVideo: promoVideo || '' } : {}),
         }
-        const saved = current ? await actions.updateVehicle(current.id, payload) : await actions.createVehicle(payload)
+        let saved = current ? await actions.updateVehicle(current.id, payload) : await actions.createVehicle(payload)
+        if (saved && supabaseMode && pendingFiles.length) {
+          const uploaded: string[] = []
+          for (const file of pendingFiles) {
+            uploaded.push(
+              await uploadVehiclePhoto(file, saved.id, saved.listingStatus === 'approved' && saved.listingActive),
+            )
+          }
+          const merged = [...images.filter((img) => !img.startsWith('data:')), ...uploaded]
+          saved = await actions.updateVehicle(saved.id, { images: merged.length ? merged : uploaded })
+          setPendingFiles([])
+        }
+        if (saved && pendingVideoFile) {
+          if (supabaseMode) {
+            const path = await uploadVehiclePromoVideo(
+              pendingVideoFile,
+              saved.id,
+              saved.listingStatus === 'approved' && saved.listingActive,
+            )
+            saved = await actions.updateVehicle(saved.id, { promoVideo: path })
+          } else {
+            const dataUrl = await fileToDataUrl(pendingVideoFile)
+            saved = await actions.updateVehicle(saved.id, { promoVideo: dataUrl })
+          }
+          setPendingVideoFile(null)
+          if (localVideoPreview?.startsWith('blob:')) URL.revokeObjectURL(localVideoPreview)
+          setLocalVideoPreview(undefined)
+        }
         if (saved) onClose()
       })}>
         <Section title="Vehicle information" />
@@ -306,30 +435,128 @@ function VehicleDialog({ vehicle, onClose, mode }: { vehicle: Vehicle | 'new' | 
         <label><FieldLabel>Fuel</FieldLabel><SelectInput {...form.register('fuel')}><option>Gasoline</option><option>Diesel</option></SelectInput></label>
         <label className="flex items-center gap-2 text-sm"><input type="checkbox" {...form.register('airconditioning')} /> Airconditioning</label>
         <label><FieldLabel>Features</FieldLabel><TextInput {...form.register('features')} /></label>
-        <Section title="Rental pricing" />
-        <label><FieldLabel>Daily rate</FieldLabel><TextInput type="number" {...form.register('pricePerDay')} /></label>
-        <label className="flex items-center gap-2 text-sm"><input type="checkbox" {...form.register('selfDrive')} /> Self-drive</label>
-        <label className="flex items-center gap-2 text-sm"><input type="checkbox" {...form.register('withDriver')} /> With driver</label>
+        {mode === 'admin' ? (
+          <>
+            <Section title="Rental package (per day)" />
+            <p className="md:col-span-2 text-xs text-muted">
+              Tiered rates for bookings. You can also manage all packages under Admin → Rental packages.
+            </p>
+            <label><FieldLabel>1 day</FieldLabel><TextInput type="number" {...form.register('rateFirstDay')} /></label>
+            <label><FieldLabel>Succeeding days</FieldLabel><TextInput type="number" {...form.register('rateSucceeding')} /></label>
+            <label><FieldLabel>10+ days (from day 10)</FieldLabel><TextInput type="number" {...form.register('rate10Days')} /></label>
+            <label><FieldLabel>15+ days (from day 15)</FieldLabel><TextInput type="number" {...form.register('rate15Plus')} /></label>
+            <div className="md:col-span-2">
+              <RentalPackageRates
+                package={{
+                  rateFirstDay: Number(form.watch('rateFirstDay')) || 0,
+                  rateSucceeding: Number(form.watch('rateSucceeding')) || 0,
+                  rate10Days: Number(form.watch('rate10Days')) || 0,
+                  rate15Plus: Number(form.watch('rate15Plus')) || 0,
+                }}
+                compact
+              />
+            </div>
+          </>
+        ) : (
+          <>
+            <Section title="Rental rates" />
+            <p className="md:col-span-2 text-xs text-muted">Package rates are set by Drive Moko admin. Listing price below is for reference only.</p>
+            <div className="md:col-span-2">
+              <RentalPackageRates package={resolveRentalPackage(current ?? ({ pricePerDay: defaultPkg.rateFirstDay } as Vehicle), data.settings)} compact />
+            </div>
+            <label><FieldLabel>Listed from (₱ / day)</FieldLabel><TextInput type="number" {...form.register('pricePerDay')} /></label>
+          </>
+        )}
         {mode === 'admin' ? (
           <>
             <Section title="Ownership" />
-            <label><FieldLabel>Owner</FieldLabel><SelectInput {...form.register('ownerId')}><option value="">Company fleet</option>{data.users.filter((user) => user.role === 'owner').map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}</SelectInput></label>
-            <label><FieldLabel>Partner</FieldLabel><SelectInput {...form.register('partnerId')}><option value="">None</option>{data.users.filter((user) => user.role === 'partner').map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}</SelectInput></label>
+            <label><FieldLabel>Partner</FieldLabel><SelectInput {...form.register('partnerId')}><option value="">Company fleet</option>{data.users.filter((user) => user.role === 'partner').map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}</SelectInput></label>
             <Section title="Listing status" />
             <label><FieldLabel>Status</FieldLabel><SelectInput {...form.register('listingStatus')}><option value="approved">Approved</option><option value="pending">Pending</option><option value="rejected">Rejected</option><option value="archived">Archived</option></SelectInput></label>
             <label className="flex items-center gap-2 text-sm"><input type="checkbox" {...form.register('listingActive')} /> Active on the public catalog</label>
           </>
         ) : null}
         <Section title="Images" />
-        <label className="md:col-span-2 text-sm">Upload a demo preview
-          <input className="mt-1 block" type="file" accept="image/*" onChange={async (event) => {
-            const file = event.target.files?.[0]
-            if (!file) return
-            const url = await fileToResizedDataUrl(file)
-            setImages((currentImages) => [...currentImages, url].slice(0, 6))
-          }} />
-        </label>
-        <div className="flex gap-2 md:col-span-2">{images.map((image) => <VehicleImage key={image.slice(0, 24)} src={image} alt="" className="h-16 w-24 rounded-lg" />)}</div>
+        <div className="md:col-span-2 flex flex-wrap items-center gap-3">
+          <FileUploadButton
+            label="Upload photos"
+            accept={IMAGE_ACCEPT.join(',')}
+            multiple
+            onPick={async (file) => {
+              if (images.length >= 6) {
+                toast.error('Up to 6 photos per vehicle.')
+                return
+              }
+              if (supabaseMode && current) {
+                setPendingFiles((files) => [...files, file].slice(0, 6))
+                const url = await fileToResizedDataUrl(file, 480)
+                setImages((currentImages) => [...currentImages, url].slice(0, 6))
+                return
+              }
+              if (supabaseMode && !current) {
+                toast.message('Save the vehicle once, then add cloud photos.')
+                const url = await fileToResizedDataUrl(file, 480)
+                setImages((currentImages) => [...currentImages, url].slice(0, 6))
+                return
+              }
+              const url = await fileToResizedDataUrl(file)
+              setImages((currentImages) => [...currentImages, url].slice(0, 6))
+            }}
+          />
+          <p className="text-xs text-muted">JPEG, PNG, or WebP · up to 6 images</p>
+        </div>
+        <div className="flex flex-wrap gap-2 md:col-span-2">
+          {images.map((image) => (
+            <VehicleImage key={image.slice(0, 24)} src={image} alt="" className="h-16 w-24 rounded-lg" />
+          ))}
+        </div>
+        <Section title="Product video" />
+        <p className="md:col-span-2 text-xs text-muted">Optional showcase clip on the public vehicle page (MP4 or WebM, max 50 MB).</p>
+        <div className="md:col-span-2 flex flex-wrap items-center gap-3">
+          <FileUploadButton
+            label={promoVideo || localVideoPreview || pendingVideoFile ? 'Replace video' : 'Upload video'}
+            accept={VIDEO_ACCEPT.join(',')}
+            onPick={(file) => {
+              if (localVideoPreview?.startsWith('blob:')) URL.revokeObjectURL(localVideoPreview)
+              setPendingVideoFile(file)
+              setLocalVideoPreview(URL.createObjectURL(file))
+              if (!supabaseMode) setPromoVideo(undefined)
+            }}
+          />
+          {(promoVideo || localVideoPreview) && !pendingVideoFile ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setPromoVideo('')
+                setPendingVideoFile(null)
+                if (localVideoPreview?.startsWith('blob:')) URL.revokeObjectURL(localVideoPreview)
+                setLocalVideoPreview(undefined)
+              }}
+            >
+              Remove video
+            </Button>
+          ) : pendingVideoFile ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setPendingVideoFile(null)
+                if (localVideoPreview?.startsWith('blob:')) URL.revokeObjectURL(localVideoPreview)
+                setLocalVideoPreview(undefined)
+              }}
+            >
+              Cancel upload
+            </Button>
+          ) : null}
+        </div>
+        {(localVideoPreview || promoVideo) ? (
+          <div className="md:col-span-2">
+            <VehicleVideo src={localVideoPreview ?? promoVideo} className="max-h-52" poster={images[0]} />
+          </div>
+        ) : null}
         {Object.values(form.formState.errors).map((error) => <ErrorText key={error?.message}>{error?.message}</ErrorText>)}
         <Button type="submit" className="md:col-span-2">Save vehicle</Button>
       </form>
@@ -384,7 +611,6 @@ export function CalendarBoard({ mode }: { mode: Role }) {
   const navigate = useNavigate()
   const calendarRef = useRef<FullCalendar>(null)
   const [vehicleId, setVehicleId] = useState('all')
-  const [ownerId, setOwnerId] = useState('all')
   const [partnerId, setPartnerId] = useState('all')
   const [openId, setOpenId] = useState<string | null>(null)
   const [calView, setCalView] = useState<FcView>('dayGridMonth')
@@ -396,7 +622,6 @@ export function CalendarBoard({ mode }: { mode: Role }) {
     bookings = bookings.filter((booking) => booking.vehicleId === vehicleId)
     vehicles = vehicles.filter((vehicle) => vehicle.id === vehicleId)
   }
-  if (ownerId !== 'all') vehicles = vehicles.filter((vehicle) => vehicle.ownerId === ownerId)
   if (partnerId !== 'all') vehicles = vehicles.filter((vehicle) => vehicle.partnerId === partnerId)
   const vehicleIds = new Set(vehicles.map((vehicle) => vehicle.id))
   bookings = bookings.filter((booking) => vehicleIds.has(booking.vehicleId))
@@ -479,16 +704,6 @@ export function CalendarBoard({ mode }: { mode: Role }) {
             </option>
           ))}
         </SelectInput>
-        {mode === 'admin' ? (
-          <SelectInput className="max-w-40" value={ownerId} onChange={(event) => setOwnerId(event.target.value)}>
-            <option value="all">All owners</option>
-            {data.users.filter((user) => user.role === 'owner').map((user) => (
-              <option key={user.id} value={user.id}>
-                {user.name}
-              </option>
-            ))}
-          </SelectInput>
-        ) : null}
         {mode === 'admin' ? (
           <SelectInput className="max-w-40" value={partnerId} onChange={(event) => setPartnerId(event.target.value)}>
             <option value="all">All partners</option>
@@ -601,39 +816,23 @@ export function CalendarBoard({ mode }: { mode: Role }) {
   )
 }
 
-export function PeopleBoard({ kind }: { kind: 'owners' | 'partners' | 'customers' }) {
+export function PeopleBoard() {
   const { data } = useSnapshot()
   const actions = useDemoActions()
   const [params] = useSearchParams()
   const [open, setOpen] = useState(params.get('new') === '1')
   const [selected, setSelected] = useState<User | null>(null)
-  const [applicationId, setApplicationId] = useState<string | null>(null)
   const [search, setSearch] = useState('')
-  const [form, setForm] = useState({ name: '', email: '', phone: '', address: '', shareRate: '70' })
+  const [form, setForm] = useState({ name: '', email: '', phone: '', address: '' })
   if (!data) return null
-  const role = kind === 'owners' ? 'owner' : kind === 'partners' ? 'partner' : 'customer'
-  const people = data.users.filter((user) => user.role === role && `${user.name} ${user.email}`.toLowerCase().includes(search.toLowerCase()))
-  const application = data.applications.find((item) => item.id === applicationId)
+  const people = data.users.filter((user) => user.role === 'customer' && `${user.name} ${user.email}`.toLowerCase().includes(search.toLowerCase()))
   return (
     <div className="space-y-4">
-      {kind === 'partners' ? (
-        <Panel>
-          <h2 className="font-bold">Applications</h2>
-          <div className="mt-3 space-y-2">
-            {data.applications.map((item) => (
-              <button key={item.id} className="flex w-full items-center justify-between rounded-xl border px-3 py-2 text-left text-sm" onClick={() => setApplicationId(item.id)}>
-                <span>{item.fullName} · {item.vehicleDetails}</span>
-                <StatusBadge value={item.status} />
-              </button>
-            ))}
-          </div>
-        </Panel>
-      ) : null}
       <Panel>
         <div className="mb-3 flex flex-wrap items-center gap-2">
-          <h1 className="text-xl font-extrabold capitalize">{kind}</h1>
+          <h1 className="text-xl font-extrabold">Customers</h1>
           <TextInput value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search" className="ml-auto max-w-xs" />
-          {kind !== 'customers' ? <Button onClick={() => setOpen(true)}>Add {role}</Button> : null}
+          <Button onClick={() => setOpen(true)}>Add customer</Button>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full min-w-[680px] text-left text-sm">
@@ -644,9 +843,20 @@ export function PeopleBoard({ kind }: { kind: 'owners' | 'partners' | 'customers
                   <td className="py-2 font-semibold">{person.name}<span className="block text-xs font-normal text-muted">{person.email}</span></td>
                   <td>{person.phone}</td>
                   <td><StatusBadge value={person.status} /></td>
-                  <td className="space-x-2 text-xs font-bold">
-                    <button className="text-info" onClick={() => setSelected(person)}>Profile</button>
-                    <button onClick={() => actions.updateUser(person.id, { status: person.status === 'active' ? 'suspended' : 'active' })}>{person.status === 'active' ? 'Suspend' : 'Reactivate'}</button>
+                  <td className="py-2">
+                    <div className="flex flex-wrap justify-end gap-2">
+                      <Button type="button" variant="outline" size="sm" onClick={() => setSelected(person)}>
+                        Profile
+                      </Button>
+                      <Button
+                        type="button"
+                        variant={person.status === 'active' ? 'soft' : 'primary'}
+                        size="sm"
+                        onClick={() => actions.updateUser(person.id, { status: person.status === 'active' ? 'suspended' : 'active' })}
+                      >
+                        {person.status === 'active' ? 'Suspend' : 'Reactivate'}
+                      </Button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -654,63 +864,58 @@ export function PeopleBoard({ kind }: { kind: 'owners' | 'partners' | 'customers
           </table>
         </div>
       </Panel>
-      <Modal open={open} onClose={() => setOpen(false)} title={`Add ${role}`}>
+      <Modal open={open} onClose={() => setOpen(false)} title="Add customer">
         <div className="grid gap-3">
           <TextInput placeholder="Name" value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} />
           <TextInput placeholder="Email" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} />
           <TextInput placeholder="Phone" value={form.phone} onChange={(event) => setForm({ ...form, phone: event.target.value })} />
           <TextInput placeholder="Address" value={form.address} onChange={(event) => setForm({ ...form, address: event.target.value })} />
-          {kind === 'partners' ? <TextInput placeholder="Share rate" type="number" value={form.shareRate} onChange={(event) => setForm({ ...form, shareRate: event.target.value })} /> : null}
           <Button onClick={async () => {
-            const created = await actions.createUser({ role, name: form.name, email: form.email, phone: form.phone, address: form.address, shareRate: Number(form.shareRate) })
+            const created = await actions.createUser({
+              role: 'customer',
+              name: form.name,
+              email: form.email,
+              phone: form.phone,
+              address: form.address,
+            })
             if (created) setOpen(false)
           }}>Save</Button>
         </div>
       </Modal>
-      <Modal open={!!selected} onClose={() => setSelected(null)} title={selected?.name ?? ''} wide>
-        {selected ? <PersonProfile person={selected} /> : null}
-      </Modal>
-      <Modal open={!!application} onClose={() => setApplicationId(null)} title="Partner application">
-        {application ? (
-          <div className="space-y-2 text-sm">
-            <p>{application.fullName} · {application.email} · {application.phone}</p>
-            <p>{application.address}</p>
-            <p>{application.vehicleDetails}</p>
-            <p>{application.ownershipType} · {application.vehicleCount} vehicle(s)</p>
-            <p>{application.notes}</p>
-            <div className="flex flex-wrap gap-2">
-              <Button onClick={() => actions.reviewApplication(application.id, 'approved', data.settings.defaultPartnerShare).then(() => setApplicationId(null))}>Approve</Button>
-              <Button variant="danger" onClick={() => actions.reviewApplication(application.id, 'rejected').then(() => setApplicationId(null))}>Reject</Button>
-              <Button variant="outline" onClick={() => actions.reviewApplication(application.id, 'needs_info', undefined, 'Please send clearer vehicle details.').then(() => setApplicationId(null))}>Request info</Button>
-            </div>
-          </div>
+      <Modal open={!!selected} onClose={() => setSelected(null)} title={selected?.name ?? ''}>
+        {selected ? (
+          <CustomerProfileSnippet person={selected} onClose={() => setSelected(null)} />
         ) : null}
       </Modal>
     </div>
   )
 }
 
-function PersonProfile({ person }: { person: User }) {
+function CustomerProfileSnippet({ person, onClose }: { person: User; onClose: () => void }) {
   const { data } = useSnapshot()
   const actions = useDemoActions()
   const [notes, setNotes] = useState(person.notes ?? '')
-  const [share, setShare] = useState(String(person.shareRate ?? ''))
   if (!data) return null
-  const vehicles = data.vehicles.filter((vehicle) => vehicle.ownerId === person.id || vehicle.partnerId === person.id)
-  const bookings = data.bookings.filter((booking) => booking.customerId === person.id || vehicles.some((vehicle) => vehicle.id === booking.vehicleId))
-  const spend = bookings.filter((booking) => booking.customerId === person.id && booking.paymentStatus === 'paid').reduce((sum, booking) => sum + booking.pricing.total, 0)
+  const bookings = data.bookings.filter((booking) => booking.customerId === person.id)
+  const spend = bookings.filter((booking) => booking.paymentStatus === 'paid').reduce((sum, booking) => sum + booking.pricing.total, 0)
   return (
     <div className="space-y-3 text-sm">
       <p>{person.email} · {person.phone}</p>
       <p>{person.address}</p>
       <p>Paid rentals: {formatPeso(spend)}</p>
-      <p className="font-bold">Vehicles</p>
-      {vehicles.map((vehicle) => <p key={vehicle.id}>{vehicle.name} · {formatPeso(vehicle.pricePerDay)}</p>)}
       <p className="font-bold">Bookings</p>
-      {bookings.slice(0, 6).map((booking) => <p key={booking.id}>{booking.reference} · <StatusBadge value={booking.status} /></p>)}
-      {person.role === 'partner' ? <label>Share rate %<TextInput value={share} onChange={(event) => setShare(event.target.value)} /></label> : null}
-      <TextArea value={notes} onChange={(event) => setNotes(event.target.value)} />
-      <Button onClick={() => actions.updateUser(person.id, { notes, shareRate: person.role === 'partner' ? Number(share) : undefined })}>Save profile</Button>
+      {bookings.slice(0, 6).map((booking) => (
+        <p key={booking.id}>
+          {booking.reference} · <StatusBadge value={booking.status} />
+        </p>
+      ))}
+      <label className="block">
+        <FieldLabel>Notes</FieldLabel>
+        <TextArea value={notes} onChange={(event) => setNotes(event.target.value)} />
+      </label>
+      <Button type="button" onClick={async () => { await actions.updateUser(person.id, { notes }); onClose() }}>
+        Save profile
+      </Button>
     </div>
   )
 }
@@ -724,10 +929,12 @@ export function PaymentsBoard() {
   if (!data) return null
   const rows = data.payments.filter((payment) => filter === 'all' || payment.status === filter)
   const verified = data.payments.filter((payment) => payment.status === 'verified').reduce((sum, payment) => sum + payment.amount, 0)
+  const outstanding = outstandingReceivables(data.bookings, data.payments)
   return (
     <div className="space-y-4">
-      <div className="grid gap-3 md:grid-cols-3">
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         <Panel><p className="text-sm text-muted">Verified</p><p className="text-2xl font-extrabold">{formatPeso(verified)}</p></Panel>
+        <Panel><p className="text-sm text-muted">Outstanding receivables</p><p className="text-2xl font-extrabold">{formatPeso(outstanding)}</p></Panel>
         <Panel><p className="text-sm text-muted">Pending checks</p><p className="text-2xl font-extrabold">{data.payments.filter((payment) => payment.status === 'pending').length}</p></Panel>
         <Panel><p className="text-sm text-muted">Rejected</p><p className="text-2xl font-extrabold">{data.payments.filter((payment) => payment.status === 'rejected').length}</p></Panel>
       </div>
@@ -751,7 +958,7 @@ export function PaymentsBoard() {
                     <td><StatusBadge value={payment.status} /></td>
                     <td className="space-x-2 text-xs font-bold">
                       {payment.status === 'pending' ? <button className="text-success" onClick={() => actions.verifyPayment(payment.id)}>Verify</button> : null}
-                      {payment.status === 'pending' ? <button className="text-danger" onClick={() => actions.rejectPayment(payment.id, 'Demo rejection')}>Reject</button> : null}
+                      {payment.status === 'pending' ? <button className="text-danger" onClick={() => actions.rejectPayment(payment.id, 'Payment not verified')}>Reject</button> : null}
                     </td>
                   </tr>
                 )
@@ -769,9 +976,10 @@ function PaymentDialog({ open, onClose, bookingId }: { open: boolean; onClose: (
   const { data } = useSnapshot()
   const actions = useDemoActions()
   const [form, setForm] = useState({ bookingId: bookingId ?? '', amount: '', method: 'cash' as PaymentMethod, reference: '', note: '', markVerified: true })
+  const [proofFile, setProofFile] = useState<File | null>(null)
   if (!data) return null
   return (
-    <Modal open={open} onClose={onClose} title="Record payment" description="Cash, GCash, Maya, or bank transfer. Nothing is charged for real.">
+    <Modal open={open} onClose={onClose} title="Record payment" description="Record cash, GCash, Maya, or bank transfer. Verified amounts update booking balances.">
       <div className="grid gap-3">
         <SelectInput value={form.bookingId} onChange={(event) => setForm({ ...form, bookingId: event.target.value })}>
           <option value="">Booking</option>
@@ -787,8 +995,27 @@ function PaymentDialog({ open, onClose, bookingId }: { open: boolean; onClose: (
         <TextInput placeholder="Reference" value={form.reference} onChange={(event) => setForm({ ...form, reference: event.target.value })} />
         <TextArea placeholder="Note" value={form.note} onChange={(event) => setForm({ ...form, note: event.target.value })} />
         <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={form.markVerified} onChange={(event) => setForm({ ...form, markVerified: event.target.checked })} /> Mark verified now</label>
+        {isSupabaseProvider() ? (
+          <label className="text-sm">
+            Payment proof (optional)
+            <input
+              className="mt-1 block w-full text-xs"
+              type="file"
+              accept="image/jpeg,image/png,image/webp,application/pdf"
+              onChange={(event) => setProofFile(event.target.files?.[0] ?? null)}
+            />
+          </label>
+        ) : null}
         <Button onClick={async () => {
-          const saved = await actions.recordPayment({ bookingId: form.bookingId, amount: Number(form.amount), method: form.method, reference: form.reference, note: form.note, markVerified: form.markVerified })
+          const saved = await actions.recordPayment({
+            bookingId: form.bookingId,
+            amount: Number(form.amount),
+            method: form.method,
+            reference: form.reference,
+            note: form.note,
+            markVerified: form.markVerified,
+            proofFile: proofFile ?? undefined,
+          })
           if (saved) onClose()
         }}>Save payment</Button>
       </div>
@@ -799,8 +1026,9 @@ function PaymentDialog({ open, onClose, bookingId }: { open: boolean; onClose: (
 export function ReportsBoard({ mode }: { mode: Role }) {
   const { data } = useSnapshot()
   const session = useSession()
-  const [start, setStart] = useState('2026-09-01')
-  const [end, setEnd] = useState('2026-11-30')
+  const financial = useFinancial()
+  const [start, setStart] = useState(addDays(manilaYmd(), -30))
+  const [end, setEnd] = useState(manilaYmd())
   if (!data || !session) return null
   const viewer = { role: mode, id: session.id }
   const bookings = scopedBookings(data.bookings, data.vehicles, mode, session.id).filter((booking) => booking.pickupDate >= start && booking.pickupDate <= end)
@@ -810,32 +1038,287 @@ export function ReportsBoard({ mode }: { mode: Role }) {
     name: vehicle.model,
     count: bookings.filter((booking) => booking.vehicleId === vehicle.id && !['cancelled', 'rejected'].includes(booking.status)).length,
   })).sort((a, b) => b.count - a.count)
-  const earnings = earningsTotal(bookings, data.vehicles, data.users, data.settings, viewer)
+  const legacyEarnings = earningsTotal(bookings, data.vehicles, data.users, data.settings, viewer)
+  const supabaseMode = isSupabaseProvider()
+  const dbEarnings = financial.earnings.data ?? []
+  const partnerSummary = partnerEarningsSummary(dbEarnings)
+  const scopedPayments =
+    mode === 'admin'
+      ? data.payments
+      : data.payments.filter((payment) => bookings.some((booking) => booking.id === payment.bookingId))
+  const verifiedInRange = verifiedRevenueInRange(scopedPayments, start, end)
+  const outstanding = outstandingReceivables(bookings, scopedPayments)
+  const cancellations = cancellationsInRange(bookings, start, end)
+  const revenueVehicles = revenueByVehicle(bookings, mode === 'admin' ? data.vehicles : vehicles, scopedPayments)
+  const dailyRevenue = dailyRevenueSeries(scopedPayments, 14, end)
+  const headlineEarnings =
+    mode === 'partner' && supabaseMode && dbEarnings.length > 0
+      ? dbEarnings
+          .filter((row) => row.recognizedAt && row.recognizedAt.slice(0, 10) >= start && row.recognizedAt.slice(0, 10) <= end)
+          .reduce((sum, row) => sum + pesoFromCentavos(row.partnerShareCentavos), 0)
+        : legacyEarnings.total
+  const exportRows = [
+    ['Metric', 'Value'],
+    ['Period start', start],
+    ['Period end', end],
+    ['Bookings in range', String(bookings.length)],
+    ['Verified revenue', String(verifiedInRange)],
+    ['Outstanding receivables', String(outstanding)],
+    ['Cancellations', String(cancellations)],
+  ]
+  if (mode === 'admin' && supabaseMode) {
+    exportRows.push(
+      ['Partner payable (centavos basis)', String(partnerSummary.payableCentavos)],
+      ['Business share from partner rentals', String(businessSharePesos(dbEarnings))],
+    )
+  }
   return (
-    <div className="space-y-4">
-      <Panel className="flex flex-wrap gap-3">
+    <div className="space-y-4 print:space-y-2">
+      <Panel className="flex flex-wrap items-end gap-3 print:border-0 print:shadow-none">
         <DateField label="From" value={start} onChange={setStart} />
         <DateField label="To" value={end} onChange={setEnd} />
+        <Button variant="outline" className="print:hidden" onClick={() => downloadCsv(`drive-moko-${mode}-report.csv`, exportRows)}>
+          Export CSV
+        </Button>
+        <Button variant="outline" className="print:hidden" onClick={() => window.print()}>
+          Print
+        </Button>
       </Panel>
-      <div className="grid gap-3 md:grid-cols-3">
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         <Panel><p className="text-sm text-muted">Bookings in range</p><p className="text-2xl font-extrabold">{bookings.length}</p></Panel>
-        <Panel><p className="text-sm text-muted">{mode === 'admin' ? 'Verified revenue' : 'Earnings'}</p><p className="text-2xl font-extrabold">{formatPeso(mode === 'admin' ? data.payments.filter((payment) => payment.status === 'verified' && payment.createdAt.slice(0, 10) >= start && payment.createdAt.slice(0, 10) <= end).reduce((sum, payment) => sum + payment.amount, 0) : earnings.total)}</p></Panel>
+        <Panel>
+          <p className="text-sm text-muted">{mode === 'admin' ? 'Verified revenue' : 'Earnings'}</p>
+          <p className="text-2xl font-extrabold">{formatPeso(mode === 'admin' ? verifiedInRange : headlineEarnings)}</p>
+        </Panel>
+        <Panel><p className="text-sm text-muted">Outstanding</p><p className="text-2xl font-extrabold">{formatPeso(outstanding)}</p></Panel>
         <Panel><p className="text-sm text-muted">Utilization</p><p className="text-2xl font-extrabold">{utilization(vehicles, bookings)}%</p></Panel>
       </div>
+      {mode === 'admin' ? (
+        <div className="grid gap-3 md:grid-cols-3">
+          <Panel><p className="text-sm text-muted">Cancellations / rejected</p><p className="text-2xl font-extrabold">{cancellations}</p></Panel>
+          <Panel>
+            <p className="text-sm text-muted">Partner payable balance</p>
+            <p className="text-2xl font-extrabold">
+              {supabaseMode ? formatPeso(pesoFromCentavos(partnerSummary.payableCentavos)) : '—'}
+            </p>
+          </Panel>
+          <Panel>
+            <p className="text-sm text-muted">Business share (partner fleet)</p>
+            <p className="text-2xl font-extrabold">{supabaseMode && dbEarnings.length ? formatPeso(businessSharePesos(dbEarnings)) : '—'}</p>
+          </Panel>
+        </div>
+      ) : null}
+      {mode === 'partner' && supabaseMode ? (
+        <div className="grid gap-3 md:grid-cols-3">
+          <Panel><p className="text-sm text-muted">Pending recognition</p><p className="text-2xl font-extrabold">{formatPeso(pesoFromCentavos(partnerSummary.pendingCentavos))}</p></Panel>
+          <Panel><p className="text-sm text-muted">Payable / in settlement</p><p className="text-2xl font-extrabold">{formatPeso(pesoFromCentavos(partnerSummary.payableCentavos))}</p></Panel>
+          <Panel><p className="text-sm text-muted">Settled</p><p className="text-2xl font-extrabold">{formatPeso(pesoFromCentavos(partnerSummary.settledCentavos))}</p></Panel>
+        </div>
+      ) : null}
+      {financial.earnings.isError && supabaseMode ? (
+        <Panel>
+          <p className="text-sm text-danger">
+            Financial tables are not available yet. Run migrations 013–015 in Supabase, then refresh.
+          </p>
+        </Panel>
+      ) : null}
       <div className="grid gap-4 lg:grid-cols-2">
         <Panel className="h-72">
           <h2 className="font-bold">Booking status</h2>
           <ResponsiveContainer width="100%" height="85%">
-            <PieChart><Pie data={counts} dataKey="count" nameKey="status" outerRadius={90}>{counts.map((entry) => <Cell key={entry.status} fill={entry.status === 'completed' ? '#16a34a' : entry.status === 'pending' ? '#f59e0b' : '#2563eb'} />)}</Pie><Tooltip /></PieChart>
+            <PieChart>
+              <Pie data={counts} dataKey="count" nameKey="status" outerRadius={90}>
+                {counts.map((entry) => (
+                  <Cell key={entry.status} fill={entry.status === 'completed' ? '#16a34a' : entry.status === 'pending' ? '#f59e0b' : '#2563eb'} />
+                ))}
+              </Pie>
+              <Tooltip />
+            </PieChart>
           </ResponsiveContainer>
         </Panel>
         <Panel className="h-72">
           <h2 className="font-bold">Most rented</h2>
           <ResponsiveContainer width="100%" height="85%">
-            <BarChart data={byVehicle.slice(0, 6)}><XAxis dataKey="name" tick={{ fontSize: 11 }} /><YAxis allowDecimals={false} /><Tooltip /><Bar dataKey="count" fill="#ffc400" /></BarChart>
+            <BarChart data={byVehicle.slice(0, 6)}>
+              <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+              <YAxis allowDecimals={false} />
+              <Tooltip />
+              <Bar dataKey="count" fill="#ffc400" />
+            </BarChart>
           </ResponsiveContainer>
         </Panel>
+        {mode === 'admin' ? (
+          <>
+            <Panel className="h-72">
+              <h2 className="font-bold">Daily verified revenue (14 days)</h2>
+              <ResponsiveContainer width="100%" height="85%">
+                <BarChart data={dailyRevenue}>
+                  <XAxis dataKey="label" tick={{ fontSize: 11 }} />
+                  <YAxis tick={{ fontSize: 11 }} />
+                  <Tooltip formatter={(value) => formatPeso(Number(value ?? 0))} />
+                  <Bar dataKey="value" fill="#2563eb" />
+                </BarChart>
+              </ResponsiveContainer>
+            </Panel>
+            <Panel className="h-72">
+              <h2 className="font-bold">Revenue by vehicle</h2>
+              <ResponsiveContainer width="100%" height="85%">
+                <BarChart data={revenueVehicles.slice(0, 6)}>
+                  <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+                  <YAxis tick={{ fontSize: 11 }} />
+                  <Tooltip formatter={(value) => formatPeso(Number(value ?? 0))} />
+                  <Bar dataKey="revenue" fill="#16a34a" />
+                </BarChart>
+              </ResponsiveContainer>
+            </Panel>
+          </>
+        ) : null}
       </div>
+    </div>
+  )
+}
+
+export function SettlementsBoard() {
+  const { data } = useSnapshot()
+  const session = useSession()
+  const actions = useDemoActions()
+  const financial = useFinancial()
+  const [partnerId, setPartnerId] = useState('')
+  const [periodStart, setPeriodStart] = useState(addDays(manilaYmd(), -30))
+  const [periodEnd, setPeriodEnd] = useState(manilaYmd())
+  const [filterPartner, setFilterPartner] = useState('all')
+  const [payOpen, setPayOpen] = useState<string | null>(null)
+  const [payoutRef, setPayoutRef] = useState('')
+  const [payNotes, setPayNotes] = useState('')
+  if (!data || !session) return null
+  const partners = data.users.filter((user) => user.role === 'partner')
+  const settlements = (financial.settlements.data ?? []).filter((row) => filterPartner === 'all' || row.partnerId === filterPartner)
+  const supabaseMode = isSupabaseProvider()
+  if (!supabaseMode) {
+    return (
+      <Panel>
+        <h1 className="text-xl font-extrabold">Partner settlements</h1>
+        <p className="mt-2 text-sm text-muted">Settlement management is available when the app uses Supabase.</p>
+      </Panel>
+    )
+  }
+  const csvRows = [
+    ['Settlement ID', 'Partner', 'Period start', 'Period end', 'Amount', 'Status', 'Payout ref', 'Paid at'],
+    ...settlements.map((row) => [
+      row.id,
+      row.partnerName ?? row.partnerId,
+      row.periodStart,
+      row.periodEnd,
+      String(pesoFromCentavos(row.totalPartnerCentavos)),
+      row.status,
+      row.payoutReference,
+      row.paidAt ?? '',
+    ]),
+  ]
+  return (
+    <div className="space-y-4">
+      <Panel>
+        <h1 className="text-xl font-extrabold">Create settlement</h1>
+        <p className="text-sm text-muted">Bundles payable partner earnings for a date range. Duplicate earning lines are blocked in the database.</p>
+        <div className="mt-3 grid gap-3 md:grid-cols-4">
+          <SelectInput value={partnerId} onChange={(event) => setPartnerId(event.target.value)}>
+            <option value="">Select partner</option>
+            {partners.map((partner) => (
+              <option key={partner.id} value={partner.id}>
+                {partner.name}
+              </option>
+            ))}
+          </SelectInput>
+          <DateField label="Period start" value={periodStart} onChange={setPeriodStart} />
+          <DateField label="Period end" value={periodEnd} onChange={setPeriodEnd} />
+          <Button
+            className="self-end"
+            disabled={!partnerId}
+            onClick={async () => {
+              await actions.createSettlement(partnerId, periodStart, periodEnd)
+              setPartnerId('')
+            }}
+          >
+            Generate draft
+          </Button>
+        </div>
+      </Panel>
+      <Panel>
+        <div className="mb-3 flex flex-wrap items-center gap-2">
+          <h2 className="text-lg font-bold">Settlement history</h2>
+          <SelectInput className="ml-auto max-w-xs" value={filterPartner} onChange={(event) => setFilterPartner(event.target.value)}>
+            <option value="all">All partners</option>
+            {partners.map((partner) => (
+              <option key={partner.id} value={partner.id}>
+                {partner.name}
+              </option>
+            ))}
+          </SelectInput>
+          <Button variant="outline" onClick={() => downloadCsv('drive-moko-settlements.csv', csvRows)}>
+            Download CSV
+          </Button>
+        </div>
+        {financial.settlements.isError ? (
+          <p className="text-sm text-danger">Could not load settlements. Confirm migrations 013–015 are applied.</p>
+        ) : settlements.length === 0 ? (
+          <p className="py-8 text-center text-sm text-muted">No settlements yet. Create a draft when partners have payable earnings.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[880px] text-left text-sm">
+              <thead className="text-xs text-muted">
+                <tr>
+                  <th>Partner</th>
+                  <th>Period</th>
+                  <th>Amount</th>
+                  <th>Status</th>
+                  <th>Payout ref</th>
+                  <th />
+                </tr>
+              </thead>
+              <tbody>
+                {settlements.map((row) => (
+                  <tr key={row.id} className="border-t">
+                    <td className="py-2">{row.partnerName ?? row.partnerId}</td>
+                    <td>
+                      {row.periodStart} – {row.periodEnd}
+                    </td>
+                    <td>{formatPeso(pesoFromCentavos(row.totalPartnerCentavos))}</td>
+                    <td>
+                      <StatusBadge value={row.status} />
+                    </td>
+                    <td>{row.payoutReference || '—'}</td>
+                    <td>
+                      {row.status === 'draft' ? (
+                        <button className="text-xs font-bold text-info" onClick={() => setPayOpen(row.id)}>
+                          Mark paid
+                        </button>
+                      ) : null}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Panel>
+      <Modal open={!!payOpen} onClose={() => setPayOpen(null)} title="Record payout" description="Stores payout reference and marks earnings settled.">
+        <div className="space-y-3">
+          <TextInput placeholder="Payout reference (GCash / bank ref)" value={payoutRef} onChange={(event) => setPayoutRef(event.target.value)} />
+          <TextArea placeholder="Notes (optional)" value={payNotes} onChange={(event) => setPayNotes(event.target.value)} />
+          <Button
+            disabled={!payoutRef.trim()}
+            onClick={async () => {
+              if (!payOpen) return
+              await actions.markSettlementPaid(payOpen, payoutRef.trim(), payNotes)
+              setPayOpen(null)
+              setPayoutRef('')
+              setPayNotes('')
+            }}
+          >
+            Confirm paid
+          </Button>
+        </div>
+      </Modal>
     </div>
   )
 }
@@ -854,7 +1337,13 @@ export function SmsBoard() {
     <div className="grid gap-4 lg:grid-cols-2">
       <Panel>
         <h1 className="text-xl font-extrabold">SMS templates</h1>
-        <p className="text-sm text-muted">Demo only. Sending records a simulated log and does not contact a phone network.</p>
+        <p className="text-sm text-muted">
+          Provider status:{' '}
+          <strong>
+            {import.meta.env.VITE_SMS_STATUS === 'configured' ? 'Configured (edge function required)' : 'Not configured'}
+          </strong>
+          . Templates are ready; production sends use Supabase Edge Functions with backend secrets — never VITE_ API keys.
+        </p>
         <div className="mt-3 space-y-3">
           {data.smsTemplates.map((item) => (
             <label key={item.id} className="block text-sm">
@@ -876,7 +1365,7 @@ export function SmsBoard() {
           </article>
         ))}
       </Panel>
-      <Modal open={open} onClose={() => setOpen(false)} title="Send test SMS" description="This stays inside the demo log.">
+      <Modal open={open} onClose={() => setOpen(false)} title="Send test SMS" description="Preview only — no message is sent to a carrier.">
         <div className="space-y-3">
           <SelectInput value={templateId} onChange={(event) => { setTemplateId(event.target.value); setBody(data.smsTemplates.find((item) => item.id === event.target.value)?.body ?? '') }}>
             {data.smsTemplates.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
@@ -890,12 +1379,178 @@ export function SmsBoard() {
   )
 }
 
+export function RentalPackagesBoard() {
+  const { data } = useSnapshot()
+  const session = useSession()
+  const actions = useDemoActions()
+  const [defaultPkg, setDefaultPkg] = useState<RentalPackage>({ ...DEFAULT_RENTAL_PACKAGE })
+  const [defaultDriver, setDefaultDriver] = useState(() => data?.settings.defaultDriverPackage ?? { insidePerDay: 1000, outsideFirstDay: 3000, outsideSucceeding: 1000 })
+  const [securityDeposit, setSecurityDeposit] = useState(() => data?.settings.securityDepositAmount ?? 3000)
+  const [byVehicle, setByVehicle] = useState<Record<string, RentalPackage>>({})
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    if (!data) return
+    setDefaultDriver({ ...data.settings.defaultDriverPackage })
+    setSecurityDeposit(data.settings.securityDepositAmount)
+    setDefaultPkg({ ...data.settings.defaultRentalPackage })
+    const next: Record<string, RentalPackage> = {}
+    for (const vehicle of data.vehicles) {
+      next[vehicle.id] = { ...resolveRentalPackage(vehicle, data.settings) }
+    }
+    setByVehicle(next)
+  }, [data?.settings.defaultRentalPackage, data?.settings.defaultDriverPackage, data?.settings.securityDepositAmount, data?.vehicles, data?.version])
+
+  if (!data || session?.role !== 'admin') return null
+
+  const vehicles = data.vehicles.filter((v) => v.listingStatus !== 'archived')
+
+  return (
+    <div className="space-y-4">
+      <Panel>
+        <h1 className="text-xl font-extrabold">Rental packages</h1>
+        <p className="mt-1 text-sm text-muted">
+          Set the site-wide default package and override rates per vehicle. Customers see these tiers when booking.
+        </p>
+        <h2 className="mt-4 text-sm font-bold text-navy">Default package</h2>
+        <p className="text-xs text-muted">Used when a vehicle does not have its own package saved.</p>
+        <div className="mt-3">
+          <RentalPackageEditor
+            value={defaultPkg}
+            onChange={setDefaultPkg}
+            saving={busy}
+            onSave={async () => {
+              setBusy(true)
+              try {
+                await actions.saveSettings({ defaultRentalPackage: defaultPkg })
+              } finally {
+                setBusy(false)
+              }
+            }}
+            saveLabel="Save default package"
+          />
+        </div>
+      </Panel>
+      <Panel>
+        <h1 className="text-lg font-extrabold">Driver package</h1>
+        <p className="mt-1 text-sm text-muted">Company-wide with-driver rates (inside vs outside province). Shown on the public booking form.</p>
+        <div className="mt-3">
+          <DriverPackageEditor
+            value={defaultDriver}
+            onChange={setDefaultDriver}
+            saving={busy}
+            onSave={async () => {
+              setBusy(true)
+              try {
+                await actions.saveSettings({ defaultDriverPackage: defaultDriver })
+              } finally {
+                setBusy(false)
+              }
+            }}
+            saveLabel="Save driver package"
+          />
+        </div>
+      </Panel>
+      <Panel>
+        <h1 className="text-lg font-extrabold">Security deposit</h1>
+        <p className="mt-1 text-sm text-muted">Refundable hold shown on booking summaries and included in the total rental amount.</p>
+        <div className="mt-3 max-w-xs">
+          <FieldLabel>Amount (PHP)</FieldLabel>
+          <TextInput
+            type="number"
+            value={securityDeposit}
+            onChange={(e) => setSecurityDeposit(Number(e.target.value) || 0)}
+          />
+          <Button
+            type="button"
+            className="mt-3"
+            disabled={busy}
+            onClick={async () => {
+              setBusy(true)
+              try {
+                await actions.saveSettings({ securityDepositAmount: securityDeposit })
+              } finally {
+                setBusy(false)
+              }
+            }}
+          >
+            Save security deposit
+          </Button>
+        </div>
+      </Panel>
+      <Panel>
+        <h2 className="font-bold">Packages by vehicle</h2>
+        <div className="mt-3 overflow-x-auto">
+          <table className="w-full min-w-[720px] text-left text-sm">
+            <thead className="text-xs text-muted">
+              <tr>
+                <th>Vehicle</th>
+                <th>1 day</th>
+                <th>Succeeding</th>
+                <th>10+ days</th>
+                <th>15+ days</th>
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              {vehicles.map((vehicle) => {
+                const pkg = byVehicle[vehicle.id] ?? resolveRentalPackage(vehicle, data.settings)
+                return (
+                  <tr key={vehicle.id} className="border-t align-top">
+                    <td className="py-3 font-semibold">
+                      <span className="flex items-center gap-2">
+                        <VehicleImage src={vehicle.images[0]} alt="" className="h-10 w-14 rounded-lg" />
+                        {vehicle.name}
+                      </span>
+                    </td>
+                    <td className="py-3">{formatPeso(pkg.rateFirstDay)}</td>
+                    <td className="py-3">{formatPeso(pkg.rateSucceeding)}</td>
+                    <td className="py-3">{formatPeso(pkg.rate10Days)}</td>
+                    <td className="py-3">{formatPeso(pkg.rate15Plus)}</td>
+                    <td className="py-3">
+                      <Button type="button" variant="outline" className="text-xs" onClick={() => setEditingId(vehicle.id)}>
+                        Edit
+                      </Button>
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      </Panel>
+      <Modal open={!!editingId} onClose={() => setEditingId(null)} title="Edit vehicle package" wide>
+        {editingId && byVehicle[editingId] ? (
+          <RentalPackageEditor
+            value={byVehicle[editingId]}
+            onChange={(next) => setByVehicle((prev) => ({ ...prev, [editingId]: next }))}
+            saving={busy}
+            onSave={async () => {
+              const pkg = byVehicle[editingId]
+              setBusy(true)
+              try {
+                await actions.updateVehicle(editingId, { rentalPackage: pkg, pricePerDay: pkg.rateFirstDay })
+                setEditingId(null)
+              } finally {
+                setBusy(false)
+              }
+            }}
+            saveLabel="Save vehicle package"
+          />
+        ) : null}
+      </Modal>
+    </div>
+  )
+}
+
 export function SettingsBoard() {
   const { data } = useSnapshot()
   const session = useSession()
   const actions = useDemoActions()
+  const supabaseMode = import.meta.env.VITE_DATA_PROVIDER === 'supabase'
   const ask = useUiStore((state) => state.askConfirm)
-  const [share, setShare] = useState(String(data?.settings.defaultPartnerShare ?? 70))
+  const [defaultFixedShare, setDefaultFixedShare] = useState(() => data?.settings.defaultPartnerFixedShare ?? DEFAULT_PARTNER_FIXED_SHARE)
   const [commission, setCommission] = useState(String(data?.settings.companyCommissionRate ?? 0))
   if (!data || !session) return null
   return (
@@ -903,13 +1558,25 @@ export function SettingsBoard() {
       <Panel>
         <h1 className="text-xl font-extrabold">Settings</h1>
         <label className="mt-3 flex items-center gap-2 text-sm"><input type="checkbox" checked={data.settings.holdPendingBookings} onChange={(event) => actions.saveSettings({ holdPendingBookings: event.target.checked })} /> Pending bookings hold the calendar</label>
-        <label className="mt-3 flex items-center gap-2 text-sm"><input type="checkbox" checked={data.settings.ownersCanBlockAvailability} onChange={(event) => actions.saveSettings({ ownersCanBlockAvailability: event.target.checked })} /> Owners and partners can block dates</label>
-        <label className="mt-3 block text-sm">Default partner share %<TextInput value={share} onChange={(event) => setShare(event.target.value)} /></label>
-        <label className="mt-3 block text-sm">Company commission on owner-only cars %<TextInput value={commission} onChange={(event) => setCommission(event.target.value)} /></label>
-        <Button className="mt-3" onClick={() => actions.saveSettings({ defaultPartnerShare: Number(share), companyCommissionRate: Number(commission) })}>Save rates</Button>
-        <p className="mt-6 text-xs text-muted">Reset clears all bookings, payments, notifications, and SMS logs while keeping demo accounts and vehicles.</p>
-        <Button variant="danger" className="mt-3" onClick={() => ask({ title: 'Reset demo data?', message: 'This clears all bookings, payments, favorites, inquiries, SMS logs, and notification history. Demo users and vehicles stay. Your login session is kept.', confirmLabel: 'Reset to walkthrough', tone: 'danger', onConfirm: () => actions.reset() })}>Reset demo data</Button>
-        <Button variant="outline" className="mt-3" onClick={() => ask({ title: 'Load full sample history?', message: 'Replaces current data with the populated demo set (~40 bookings) for charts and report walkthroughs. This cannot be undone except by resetting again.', confirmLabel: 'Load sample history', tone: 'primary', onConfirm: () => actions.resetFull() })}>Load full sample history</Button>
+        <label className="mt-3 flex items-center gap-2 text-sm"><input type="checkbox" checked={data.settings.ownersCanBlockAvailability} onChange={(event) => actions.saveSettings({ ownersCanBlockAvailability: event.target.checked })} /> Partners can block unavailable dates</label>
+        <p className="mt-3 text-sm font-bold">Default fixed partner share (new partners)</p>
+        <RentalPackageEditor value={defaultFixedShare} onChange={setDefaultFixedShare} />
+        <label className="mt-3 block text-sm">Company commission on fleet vehicles (no partner) %<TextInput value={commission} onChange={(event) => setCommission(event.target.value)} /></label>
+        <Button className="mt-3" onClick={() => actions.saveSettings({ defaultPartnerFixedShare: defaultFixedShare, companyCommissionRate: Number(commission) })}>Save settings</Button>
+        <p className="mt-4 text-sm text-muted">
+          Rental tier pricing is managed on{' '}
+          <Link to="/admin/rental-packages" className="font-bold text-info">
+            Rental packages
+          </Link>
+          .
+        </p>
+        {supabaseMode ? null : (
+          <>
+            <p className="mt-6 text-xs text-muted">Reset clears all bookings, payments, notifications, and SMS logs while keeping demo accounts and vehicles.</p>
+            <Button variant="danger" className="mt-3" onClick={() => ask({ title: 'Reset demo data?', message: 'This clears all bookings, payments, favorites, inquiries, SMS logs, and notification history. Demo users and vehicles stay. Your login session is kept.', confirmLabel: 'Reset to walkthrough', tone: 'danger', onConfirm: () => actions.reset() })}>Reset demo data</Button>
+            <Button variant="outline" className="mt-3" onClick={() => ask({ title: 'Load full sample history?', message: 'Replaces current data with the populated demo set (~40 bookings) for charts and report walkthroughs. This cannot be undone except by resetting again.', confirmLabel: 'Load sample history', tone: 'primary', onConfirm: () => actions.resetFull() })}>Load full sample history</Button>
+          </>
+        )}
       </Panel>
       <Panel>
         <h2 className="font-bold">Inquiries</h2>
@@ -929,7 +1596,7 @@ export function ProfileBoard() {
     <Panel className="max-w-xl">
       <h1 className="text-xl font-extrabold">Profile & settings</h1>
       <p className="text-sm text-muted">{session.email} · {session.title}</p>
-      <p className="mt-2 text-xs text-muted">Demo mode does not store passwords.</p>
+      <p className="mt-2 text-xs text-muted">Password changes use Supabase secure reset when enabled.</p>
       <label className="mt-3 block text-sm">Phone<TextInput value={phone} onChange={(event) => setPhone(event.target.value)} /></label>
       <label className="mt-3 block text-sm">Address<TextInput value={address} onChange={(event) => setAddress(event.target.value)} /></label>
       <Button className="mt-3" onClick={() => actions.updateUser(session.id, { phone, address })}>Save profile</Button>
@@ -940,21 +1607,119 @@ export function ProfileBoard() {
 export function StatementsBoard() {
   const { data } = useSnapshot()
   const session = useSession()
+  const financial = useFinancial()
   if (!data || !session) return null
-  const bookings = scopedBookings(data.bookings, data.vehicles, 'partner', session.id).filter((booking) => ['confirmed', 'ongoing', 'completed'].includes(booking.status))
+  const supabaseMode = isSupabaseProvider()
+  const dbEarnings = financial.earnings.data ?? []
+  const settlements = financial.settlements.data ?? []
+  if (supabaseMode) {
+    const rows = [['Reference', 'Vehicle', 'Status', 'Gross', 'Partner share', 'Settlement status']]
+    dbEarnings.forEach((earning) => {
+      const related = settlements.find((settlement) => settlement.status === 'paid' && earning.status === 'settled')
+      rows.push([
+        earning.bookingReference ?? earning.bookingId,
+        earning.vehicleName ?? '',
+        earning.status,
+        String(pesoFromCentavos(earning.grossCentavos)),
+        String(pesoFromCentavos(earning.partnerShareCentavos)),
+        related ? `Paid ${related.paidAt?.slice(0, 10) ?? ''} · ${related.payoutReference}` : earning.status,
+      ])
+    })
+    return (
+      <div className="space-y-4">
+        <Panel>
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <h1 className="text-xl font-extrabold">Earnings & statements</h1>
+            <Button variant="outline" onClick={() => downloadCsv('drive-moko-partner-earnings.csv', rows)}>
+              Download CSV
+            </Button>
+          </div>
+          {financial.earnings.isError ? (
+            <p className="text-sm text-danger">Run SQL migrations 013–015 to enable partner earnings.</p>
+          ) : dbEarnings.length === 0 ? (
+            <p className="py-8 text-center text-sm text-muted">No recognized earnings yet. Completed rentals on your vehicles will appear here.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[760px] text-left text-sm">
+                <thead className="text-xs text-muted">
+                  <tr>
+                    <th>Booking</th>
+                    <th>Vehicle</th>
+                    <th>Status</th>
+                    <th>Gross</th>
+                    <th>Your share</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {dbEarnings.map((earning) => (
+                    <tr key={earning.id} className="border-t">
+                      <td className="py-2 font-semibold">{earning.bookingReference ?? earning.bookingId}</td>
+                      <td>{earning.vehicleName}</td>
+                      <td>
+                        <StatusBadge value={earning.status} />
+                      </td>
+                      <td>{formatPeso(pesoFromCentavos(earning.grossCentavos))}</td>
+                      <td>{formatPeso(pesoFromCentavos(earning.partnerShareCentavos))}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </Panel>
+        <Panel>
+          <h2 className="mb-3 font-bold">Settlement history</h2>
+          {settlements.length === 0 ? (
+            <p className="text-sm text-muted">No settlements recorded yet.</p>
+          ) : (
+            settlements.map((row) => (
+              <article key={row.id} className="border-t py-2 text-sm">
+                <p className="font-semibold">
+                  {row.periodStart} – {row.periodEnd} · {formatPeso(pesoFromCentavos(row.totalPartnerCentavos))}
+                </p>
+                <p className="text-muted">
+                  <StatusBadge value={row.status} /> {row.payoutReference ? `Ref ${row.payoutReference}` : null}
+                </p>
+              </article>
+            ))
+          )}
+        </Panel>
+      </div>
+    )
+  }
+  const bookings = scopedBookings(data.bookings, data.vehicles, 'partner', session.id).filter((booking) =>
+    ['confirmed', 'ongoing', 'completed'].includes(booking.status),
+  )
   const rows = [['Reference', 'Vehicle', 'Pickup', 'Rental', 'Share']]
   bookings.forEach((booking) => {
     const vehicle = data.vehicles.find((item) => item.id === booking.vehicleId)
-    rows.push([booking.reference, vehicle?.name ?? '', booking.pickupDate, String(booking.pricing.total), String(shareAmount(booking, vehicle, data.users, data.settings, { role: 'partner', id: session.id }))])
+    rows.push([
+      booking.reference,
+      vehicle?.name ?? '',
+      booking.pickupDate,
+      String(booking.pricing.total),
+      String(shareAmount(booking, vehicle, data.users, data.settings, { role: 'partner', id: session.id })),
+    ])
   })
   return (
     <Panel>
       <div className="mb-3 flex items-center justify-between">
         <h1 className="text-xl font-extrabold">Statements</h1>
-        <Button onClick={() => downloadCsv('drive-moko-partner-statement.csv', rows)}>Download demo statement</Button>
+        <Button onClick={() => downloadCsv('drive-moko-partner-statement.csv', rows)}>Download statement (CSV)</Button>
       </div>
-      <p className="mb-3 text-sm text-muted">Share rate on this account: {session.shareRate ?? data.settings.defaultPartnerShare}%. The file is generated in the browser.</p>
-      {rows.slice(1).map((row) => <p key={row[0]} className="border-t py-2 text-sm">{row[0]} · {row[1]} · rental {formatPeso(Number(row[3]))} · share {formatPeso(Number(row[4]))}</p>)}
+      <div className="mb-3">
+        <p className="text-sm font-bold text-ink">Your fixed share (per day)</p>
+        <RentalPackageRates package={resolvePartnerFixedShare(session, data.settings)} compact />
+      </div>
+      {rows.length === 1 ? (
+        <p className="py-8 text-center text-sm text-muted">No rental activity to statement yet.</p>
+      ) : (
+        rows.slice(1).map((row) => (
+          <p key={row[0]} className="border-t py-2 text-sm">
+            {row[0]} · {row[1]} · rental {formatPeso(Number(row[3]))} · share {formatPeso(Number(row[4]))}
+          </p>
+        ))
+      )}
     </Panel>
   )
 }

@@ -5,7 +5,9 @@ import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { VehicleImage } from '@/components/common/VehicleImage'
 import { Button } from '@/components/ui/Button'
-import { DateField, SelectInput } from '@/components/ui/Fields'
+import { RentalFulfillmentPicker } from '@/components/rentals/RentalFulfillmentPicker'
+import { DateField } from '@/components/ui/Fields'
+import type { FulfillmentMode } from '@/constants/pickup'
 import { BRAND, FAQS, SERVICES, TESTIMONIALS } from '@/constants/content'
 import { useSnapshot } from '@/hooks/useDemo'
 import { formatPeso } from '@/utils/money'
@@ -33,13 +35,13 @@ export function HomePage() {
   const navigate = useNavigate()
   const reduce = useReducedMotion()
   const [rentalType, setRentalType] = useState<'self-drive' | 'with-driver'>('self-drive')
-  const [location, setLocation] = useState('Nueva Vizcaya')
+  const [fulfillmentMode, setFulfillmentMode] = useState<FulfillmentMode>('delivery')
   const [pickup, setPickup] = useState('')
   const [ret, setRet] = useState('')
   const featured = (data?.vehicles ?? []).filter((vehicle) => vehicle.listingStatus === 'approved').slice(0, 4)
 
   const search = () => {
-    const params = new URLSearchParams({ location, type: rentalType })
+    const params = new URLSearchParams({ type: rentalType, fulfillment: fulfillmentMode })
     if (pickup) params.set('pickup', pickup)
     if (ret) params.set('return', ret)
     navigate(`/cars?${params.toString()}`)
@@ -76,16 +78,15 @@ export function HomePage() {
               <Users className="h-4 w-4" /> With Driver
             </button>
           </div>
-          <div className="grid gap-3 rounded-b-3xl rounded-tr-3xl bg-white p-4 shadow-[0_20px_50px_rgba(7,24,51,0.12)] sm:grid-cols-2 lg:grid-cols-[1fr_1fr_1fr_auto] lg:items-end">
-            <label className="block min-w-0">
-              <span className="mb-1.5 flex items-center gap-1 text-xs font-semibold text-muted"><MapPin className="h-3.5 w-3.5" /> Pickup Location</span>
-              <SelectInput value={location} onChange={(event) => setLocation(event.target.value)}>
-                {data?.settings.locations.map((item) => <option key={item}>{item}</option>)}
-              </SelectInput>
-            </label>
-            <DateField label="Pickup Date" value={pickup} onChange={setPickup} disablePast />
-            <DateField label="Return Date" value={ret} onChange={setRet} disablePast />
-            <Button className="h-11 sm:col-span-2 lg:col-span-1" onClick={search}><Search className="h-4 w-4" /> Search Cars</Button>
+          <div className="grid gap-3 rounded-b-3xl rounded-tr-3xl bg-white p-4 shadow-[0_20px_50px_rgba(7,24,51,0.12)]">
+            <RentalFulfillmentPicker mode={fulfillmentMode} onModeChange={setFulfillmentMode} suggestDelivery compact />
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_auto] lg:items-end">
+              <DateField label="Pickup Date" value={pickup} onChange={setPickup} disablePast />
+              <DateField label="Return Date" value={ret} onChange={setRet} disablePast />
+              <Button className="h-11 sm:col-span-2 lg:col-span-1" onClick={search}>
+                <Search className="h-4 w-4" /> Search Cars
+              </Button>
+            </div>
           </div>
         </div>
       </section>
@@ -122,7 +123,7 @@ export function HomePage() {
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
             {featured.map((vehicle) => (
               <article key={vehicle.id} className="overflow-hidden rounded-2xl bg-white shadow-sm">
-                <VehicleImage src={vehicle.images[0]} alt={`Demo photo of ${vehicle.name}`} className="h-40 w-full" />
+                <VehicleImage src={vehicle.images[0]} alt={vehicle.name} className="h-40 w-full" />
                 <div className="p-4">
                   <h3 className="font-bold">{vehicle.name}</h3>
                   <p className="mt-1 text-sm text-muted">{vehicle.seats} Seater · {vehicle.transmission}</p>
@@ -149,7 +150,7 @@ export function HomePage() {
         <div className="mx-auto flex max-w-[1440px] flex-col items-start justify-between gap-6 px-4 md:flex-row md:items-center">
           <div>
             <h2 className="text-3xl font-extrabold">Why choose {BRAND.name}?</h2>
-            <p className="mt-2 max-w-xl text-white/75">Local trips around Nueva Vizcaya, a clear booking path, and partner vehicles managed from one demo workspace.</p>
+            <p className="mt-2 max-w-xl text-white/75">Local trips around Nueva Vizcaya, a clear booking path, and partner vehicles managed from one operations desk.</p>
           </div>
           <Link to="/become-a-partner" className="rounded-full bg-gold px-5 py-3 text-sm font-bold text-ink">Become a Partner</Link>
         </div>
@@ -157,7 +158,7 @@ export function HomePage() {
 
       <section className="mx-auto max-w-[1440px] px-4 py-16">
         <h2 className="text-center text-3xl font-extrabold">Customer stories</h2>
-        <p className="mb-6 text-center text-sm text-muted">Demonstration testimonials, not verified reviews.</p>
+        <p className="mb-6 text-center text-sm text-muted">Customer reviews appear when published for each vehicle.</p>
         <div className="grid gap-4 md:grid-cols-3">
           {TESTIMONIALS.map((item) => (
             <figure key={item.name} className="rounded-2xl border border-line p-5">

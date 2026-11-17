@@ -9,7 +9,6 @@ export const BRAND = {
 
 export const DEMO_ACCOUNTS = [
   { id: 'user-admin', role: 'Administrator', email: 'admin@drivemoko.demo', blurb: 'Full operations dashboard' },
-  { id: 'user-owner', role: 'Car Owner', email: 'owner@drivemoko.demo', blurb: 'Juan Dela Cruz fleet' },
   { id: 'user-partner', role: 'Links / Partner', email: 'partner@drivemoko.demo', blurb: 'Nehemiah Sales share' },
   { id: 'user-maria', role: 'Customer', email: 'customer@drivemoko.demo', blurb: 'Maria Santos bookings' },
 ] as const
@@ -22,17 +21,16 @@ export const DEFAULT_INCLUSIONS = [
 ]
 
 export const RENTAL_TERMS = [
-  'This is a demonstration rental policy. Final production terms will be confirmed by Drive Moko before a real rental.',
-  'A booking stays Pending until an administrator confirms vehicle availability.',
-  'Self-drive renters present a valid driver\'s license at pickup. With-driver rentals include a professional driver.',
-  'Return the vehicle with the agreed fuel level. Extra cleaning or late return may be charged in a future production version.',
+  'Bookings remain Pending until Drive Moko confirms vehicle availability.',
+  'Self-drive renters must present a valid driver\'s license at pickup. With-driver rentals include a professional driver.',
+  'Return the vehicle with the agreed fuel level. Extra cleaning, damage, or late return may incur charges per company policy.',
   'Confirmed and ongoing rentals block the vehicle calendar. Cancelled or rejected requests release those dates.',
-  'The demo does not collect real payments, security deposits, or identity documents.',
+  'Payment terms and security deposits are confirmed when your booking is approved.',
 ]
 
 export const REQUIREMENTS = [
   { title: 'Valid driver\'s license', body: 'Required for self-drive. With-driver bookings can be arranged without the renter driving.' },
-  { title: 'Government-issued ID', body: 'Shown at pickup. Do not upload identity documents in this demo.' },
+  { title: 'Government-issued ID', body: 'Shown at pickup. Upload of license images will be enabled in a future update.' },
   { title: 'Approved booking', body: 'Wait for the Pending request to become Confirmed before traveling.' },
   { title: 'Agreed schedule', body: 'Pickup and return follow the dates and times on the booking reference.' },
 ]
