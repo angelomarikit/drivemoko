@@ -289,15 +289,15 @@ export function VehiclesBoard({ mode }: { mode: 'admin' | 'partner' }) {
                         size="sm"
                         onClick={() =>
                           ask({
-                            title: 'Archive vehicle?',
-                            message: `${vehicle.name} will leave the public catalog.`,
-                            confirmLabel: 'Archive',
+                            title: 'Delete vehicle?',
+                            message: `${vehicle.name} will be removed from the fleet. You can add it again later with Add vehicle.`,
+                            confirmLabel: 'Delete',
                             tone: 'danger',
-                            onConfirm: () => actions.archiveVehicle(vehicle.id),
+                            onConfirm: () => actions.deleteVehicle(vehicle.id),
                           })
                         }
                       >
-                        Archive
+                        Delete
                       </Button>
                     ) : null}
                     {mode === 'admin' && vehicle.listingStatus === 'pending' ? (

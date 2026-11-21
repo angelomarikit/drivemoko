@@ -8,6 +8,7 @@ import { listInspections, upsertInspection } from '@/services/rentals/inspection
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import type { Booking } from '@/types'
 import { toast } from 'sonner'
+import { friendlyErrorMessage } from '@/utils/friendlyError'
 
 export function RentalOpsPanel({ booking, mode }: { booking: Booking; mode: string }) {
   const session = useSession()
@@ -66,7 +67,7 @@ export function RentalOpsPanel({ booking, mode }: { booking: Booking; mode: stri
               toast.success('Check-out recorded.')
               void queryClient.invalidateQueries({ queryKey: ['inspections', booking.id] })
             } catch (error) {
-              toast.error(error instanceof Error ? error.message : 'Could not save check-out.')
+              toast.error(friendlyErrorMessage(error, 'booking'))
             }
           }}
         >
@@ -100,7 +101,7 @@ export function RentalOpsPanel({ booking, mode }: { booking: Booking; mode: stri
               toast.success('Return inspection saved.')
               void queryClient.invalidateQueries({ queryKey: ['inspections', booking.id] })
             } catch (error) {
-              toast.error(error instanceof Error ? error.message : 'Could not save return.')
+              toast.error(friendlyErrorMessage(error, 'booking'))
             }
           }}
         >
@@ -132,7 +133,7 @@ export function RentalOpsPanel({ booking, mode }: { booking: Booking; mode: stri
                 toast.success('Extension requested.')
                 void queryClient.invalidateQueries({ queryKey: ['extensions', booking.id] })
               } catch (error) {
-                toast.error(error instanceof Error ? error.message : 'Extension request failed.')
+                toast.error(friendlyErrorMessage(error, 'booking'))
               }
             }}
           >
@@ -147,7 +148,7 @@ export function RentalOpsPanel({ booking, mode }: { booking: Booking; mode: stri
                   toast.success('Extension approved.')
                   void queryClient.invalidateQueries({ queryKey: ['extensions', booking.id] })
                 } catch (error) {
-                  toast.error(error instanceof Error ? error.message : 'Could not approve.')
+                  toast.error(friendlyErrorMessage(error, 'booking'))
                 }
               }}
             >
@@ -168,7 +169,7 @@ export function RentalOpsPanel({ booking, mode }: { booking: Booking; mode: stri
               await flagLateReturn(booking.id, Number(lateFee) || 0)
               toast.success('Late return flagged.')
             } catch (error) {
-              toast.error(error instanceof Error ? error.message : 'Update failed.')
+              toast.error(friendlyErrorMessage(error, 'booking'))
             }
           }}
         >

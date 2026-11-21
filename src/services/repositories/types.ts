@@ -23,7 +23,7 @@ export interface VehicleRepository {
   get: (id: string) => Promise<Vehicle | null>
   create: (input: VehicleInput, actorId: string) => Promise<Vehicle>
   update: (id: string, patch: Partial<Vehicle>, actorId: string) => Promise<Vehicle>
-  archive: (id: string, actorId: string) => Promise<void>
+  delete: (id: string, actorId: string) => Promise<void>
 }
 
 export interface BookingRepository {

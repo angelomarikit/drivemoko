@@ -107,13 +107,18 @@ export async function updateVehicle(id: string, patch: Partial<VehicleInput>, ac
   return vehicle
 }
 
-export async function archiveVehicle(id: string, actorId: string): Promise<void> {
+/** Removes a vehicle from the catalog so it can be re-added fresh later (soft delete). */
+export async function deleteVehicle(id: string, actorId: string): Promise<void> {
   const actor = await getActor(actorId)
-  if (!actor || actor.role !== 'admin') throw new Error('Only an administrator can do that.')
+  if (!actor || actor.role !== 'admin') throw new Error('Only an administrator can remove a vehicle.')
   const supabase = getSupabaseClient()
+  await supabase.from('vehicle_images').delete().eq('vehicle_id', id)
   const { error } = await supabase
     .from('vehicles')
     .update({ listing_status: 'archived', listing_active: false, deleted_at: new Date().toISOString() })
     .eq('id', id)
   if (error) throw new Error(error.message)
 }
+
+/** @deprecated Use deleteVehicle */
+export const archiveVehicle = deleteVehicle

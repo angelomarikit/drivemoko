@@ -2,6 +2,7 @@ import { getSupabaseClient } from '@/lib/supabase/client'
 import { DOC_ACCEPT, IMAGE_ACCEPT, IMAGE_MAX_BYTES, VIDEO_ACCEPT, VIDEO_MAX_BYTES, type StorageBucketId } from '@/lib/storage/buckets'
 import { parseStorageObjectPath } from '@/services/storage/paths'
 import { resizeImageFile } from '@/utils/files'
+import { friendlyErrorMessage } from '@/utils/friendlyError'
 
 export type UploadProgress = (ratio: number) => void
 
@@ -29,13 +30,7 @@ export async function uploadStorageObject(
   })
   options?.onProgress?.(1)
   if (error) {
-    const message = error.message ?? 'Upload failed.'
-    if (/row-level security|invalid input syntax for type uuid/i.test(message)) {
-      throw new Error(
-        'Could not upload this file because of a storage permission issue. Sign in as the customer who made the booking and try again.',
-      )
-    }
-    throw new Error(message)
+    throw new Error(friendlyErrorMessage(error, 'booking'))
   }
   return fullPath
 }

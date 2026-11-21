@@ -9,7 +9,7 @@ import { listApplications, reviewApplication, submitApplication } from '@/servic
 import { listPayments, recordPayment, rejectPayment, verifyPayment } from '@/services/supabase/payments'
 import { fetchSupabaseSnapshot } from '@/services/supabase/snapshot'
 import { findVehicleByParam } from '@/utils/vehicleParam'
-import { archiveVehicle, createVehicle, updateVehicle } from '@/services/supabase/vehicles'
+import { createVehicle, deleteVehicle, updateVehicle } from '@/services/supabase/vehicles'
 import type { Booking } from '@/types'
 
 const phase4Later = (name: string) => () => {
@@ -23,7 +23,7 @@ export const supabaseRepository: DemoRepository = {
     get: async (id) => findVehicleByParam((await fetchSupabaseSnapshot()).vehicles, id) ?? null,
     create: createVehicle,
     update: updateVehicle,
-    archive: archiveVehicle,
+    delete: deleteVehicle,
   },
   bookings: {
     list: async () => (await fetchSupabaseSnapshot()).bookings,

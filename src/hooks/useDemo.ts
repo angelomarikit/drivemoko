@@ -11,6 +11,7 @@ import { repositories, maintenanceRepository, sessionRepository, createInquiry, 
 import { useDemoStore } from '@/stores/demoStore'
 import { useDataVersionStore } from '@/stores/dataVersionStore'
 import type { BookingStatus, CreateBookingInput, UserInput, VehicleInput } from '@/types'
+import { friendlyErrorMessage } from '@/utils/friendlyError'
 
 export { useAppReady, useHydrated } from '@/hooks/useAppReady'
 
@@ -38,14 +39,18 @@ export function useSnapshot() {
   })
 }
 
-async function run<T>(work: () => Promise<T> | T, success?: string) {
+async function run<T>(
+  work: () => Promise<T> | T,
+  success?: string,
+  errorContext: Parameters<typeof friendlyErrorMessage>[1] = 'general',
+) {
   try {
     const result = await work()
     if (isSupabaseProvider()) useDataVersionStore.getState().bump()
     if (success) toast.success(success)
     return result
   } catch (error) {
-    toast.error(error instanceof Error ? error.message : 'Something went wrong.')
+    toast.error(friendlyErrorMessage(error, errorContext))
     throw error
   }
 }
@@ -83,15 +88,21 @@ export function useDemoActions() {
       })
     },
     createBooking: (input: Omit<CreateBookingInput, 'actorId'>) =>
-      run(() => repositories.bookings.create({ ...input, actorId: session?.id ?? null }), 'Booking request sent'),
+      run(
+        () => repositories.bookings.create({ ...input, actorId: session?.id ?? null }),
+        'Booking request sent',
+        'booking',
+      ),
     transition: (id: string, status: BookingStatus, note?: string) =>
       run(() => repositories.bookings.transition(id, status, actorId, note), `Booking marked ${status}`),
     updateBooking: (id: string, patch: Parameters<typeof repositories.bookings.update>[1]) =>
       run(() => repositories.bookings.update(id, patch, actorId), 'Booking updated'),
-    createVehicle: (input: VehicleInput) => run(() => repositories.vehicles.create(input, actorId), 'Vehicle saved'),
+    createVehicle: (input: VehicleInput) =>
+      run(() => repositories.vehicles.create(input, actorId), 'Vehicle saved', 'vehicle'),
     updateVehicle: (id: string, patch: Partial<VehicleInput>) =>
-      run(() => repositories.vehicles.update(id, patch, actorId), 'Vehicle updated'),
-    archiveVehicle: (id: string) => run(() => repositories.vehicles.archive(id, actorId), 'Vehicle archived'),
+      run(() => repositories.vehicles.update(id, patch, actorId), 'Vehicle updated', 'vehicle'),
+    deleteVehicle: (id: string) =>
+      run(() => repositories.vehicles.delete(id, actorId), 'Vehicle removed', 'vehicle'),
     addMaintenance: (input: Omit<import('@/types').MaintenanceInput, 'actorId'>) =>
       run(() => maintenanceRepository.add({ ...input, actorId }), 'Dates blocked'),
     removeMaintenance: (id: string) => run(() => maintenanceRepository.remove(id, actorId), 'Block removed'),

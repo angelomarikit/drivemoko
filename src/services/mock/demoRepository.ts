@@ -34,7 +34,7 @@ export const demoRepository: DemoRepository = {
     get: async (id) => data().vehicles.find((vehicle) => vehicle.id === id) ?? null,
     create: async (input, actorId) => data().createVehicle(input, actorId),
     update: async (id, patch, actorId) => data().updateVehicle(id, patch, actorId),
-    archive: async (id, actorId) => data().archiveVehicle(id, actorId),
+    delete: async (id, actorId) => data().deleteVehicle(id, actorId),
   },
   bookings: {
     list: async () => data().bookings,

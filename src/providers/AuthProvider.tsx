@@ -4,6 +4,7 @@ import { getSupabaseClient } from '@/lib/supabase/client'
 import { fetchProfile } from '@/services/auth/authService'
 import { useAuthSessionStore } from '@/stores/authSessionStore'
 import type { User } from '@/types'
+import { friendlyErrorMessage } from '@/utils/friendlyError'
 
 type AuthContextValue = {
   ready: boolean
@@ -45,7 +46,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch (error) {
       setUser(null)
       useAuthSessionStore.getState().setUser(null)
-      setAuthError(error instanceof Error ? error.message : 'Could not load profile.')
+      setAuthError(friendlyErrorMessage(error, 'account'))
     }
   }, [enabled])
 

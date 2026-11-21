@@ -45,7 +45,7 @@ interface DemoActions {
   updateBooking: (id: string, patch: Partial<Booking>, actorId: string) => Booking
   createVehicle: (input: VehicleInput, actorId: string) => Vehicle
   updateVehicle: (id: string, patch: Partial<Vehicle>, actorId: string) => Vehicle
-  archiveVehicle: (id: string, actorId: string) => void
+  deleteVehicle: (id: string, actorId: string) => void
   addMaintenance: (input: MaintenanceInput) => void
   removeMaintenance: (id: string, actorId: string) => void
   recordPayment: (input: PaymentInput) => Payment
@@ -411,9 +411,13 @@ export const useDemoStore = create<DemoState>()(
         })
         return vehicle
       },
-      archiveVehicle: (id, actorId) => {
+      deleteVehicle: (id, actorId) => {
         requireAdmin(get().users, actorId)
-        get().updateVehicle(id, { listingStatus: 'archived', listingActive: false }, actorId)
+        const state = get()
+        set({
+          vehicles: state.vehicles.filter((vehicle) => vehicle.id !== id),
+          version: state.version + 1,
+        })
       },
       addMaintenance: (input) => {
         const state = get()

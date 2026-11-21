@@ -9,6 +9,7 @@ import { ErrorText, FieldLabel, TextInput } from '@/components/ui/Fields'
 import { DEMO_ACCOUNTS } from '@/constants/content'
 import { isMockProvider, isSupabaseProvider, supabaseConfigured } from '@/lib/config'
 import { useDemoActions } from '@/hooks/useDemo'
+import { friendlyErrorMessage } from '@/utils/friendlyError'
 import {
   getAuthUserEmailVerified,
   registerCustomer,
@@ -100,7 +101,7 @@ export function ResetPasswordPage() {
             toast.success('Password updated. Sign in with your new password.')
             navigate('/login')
           } catch (error) {
-            toast.error(error instanceof Error ? error.message : 'Could not update password.')
+            toast.error(friendlyErrorMessage(error, 'account'))
           } finally {
             setBusy(false)
           }
@@ -137,7 +138,7 @@ export function VerifyEmailNoticePage() {
               await resendVerificationEmail(email)
               toast.success('If the account exists, a new verification email was sent.')
             } catch (error) {
-              toast.error(error instanceof Error ? error.message : 'Could not resend.')
+              toast.error(friendlyErrorMessage(error, 'account'))
             }
           }}
         >
@@ -225,7 +226,7 @@ function LoginPageSupabase() {
             toast.success(`Welcome back, ${user.name.split(' ')[0]}.`)
             navigate(homeForRole(user.role))
           } catch (error) {
-            toast.error(error instanceof Error ? error.message : 'Sign-in failed.')
+            toast.error(friendlyErrorMessage(error, 'account'))
           } finally {
             setBusy(false)
           }
@@ -363,7 +364,7 @@ function RegisterPageSupabase() {
               navigate(homeForRole(result.user.role))
             }
           } catch (error) {
-            toast.error(error instanceof Error ? error.message : 'Registration failed.')
+            toast.error(friendlyErrorMessage(error, 'account'))
           } finally {
             setBusy(false)
           }
@@ -450,7 +451,7 @@ function ForgotPasswordPageSupabase() {
             await requestPasswordReset(values.email)
             toast.success('If that email is registered, you will receive reset instructions.')
           } catch (error) {
-            toast.error(error instanceof Error ? error.message : 'Could not send reset email.')
+            toast.error(friendlyErrorMessage(error, 'account'))
           } finally {
             setBusy(false)
           }

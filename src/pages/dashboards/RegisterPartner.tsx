@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { Link } from 'react-router-dom'
 import { toast } from 'sonner'
+import { friendlyErrorMessage } from '@/utils/friendlyError'
 import { z } from 'zod'
 import { Panel } from '@/components/layout/DashboardLayout'
 import { Button } from '@/components/ui/Button'
@@ -181,7 +182,7 @@ export function RegisterPartnerPage() {
                 setResult({ email: createdEmail, password: values.password })
                 toast.success('Partner account provisioned.')
               } catch (error) {
-                toast.error(error instanceof Error ? error.message : 'Registration failed.')
+                toast.error(friendlyErrorMessage(error, 'account'))
               } finally {
                 setBusy(false)
               }
