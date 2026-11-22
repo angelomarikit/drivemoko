@@ -107,17 +107,54 @@ export async function updateVehicle(id: string, patch: Partial<VehicleInput>, ac
   return vehicle
 }
 
-/** Removes a vehicle from the catalog so it can be re-added fresh later (soft delete). */
-export async function deleteVehicle(id: string, actorId: string): Promise<void> {
-  const actor = await getActor(actorId)
-  if (!actor || actor.role !== 'admin') throw new Error('Only an administrator can remove a vehicle.')
-  const supabase = getSupabaseClient()
-  await supabase.from('vehicle_images').delete().eq('vehicle_id', id)
-  const { error } = await supabase
+function rpcMissing(error: { code?: string; message?: string }) {
+  const message = (error.message ?? '').toLowerCase()
+  return (
+    error.code === '42883' ||
+    error.code === 'PGRST202' ||
+    message.includes('admin_remove_vehicle') ||
+    message.includes('could not find the function')
+  )
+}
+
+async function softDeleteVehicleDirect(id: string, supabase: ReturnType<typeof getSupabaseClient>) {
+  const { error: imagesError } = await supabase.from('vehicle_images').delete().eq('vehicle_id', id)
+  if (imagesError) throw new Error(imagesError.message)
+
+  const { data, error } = await supabase
     .from('vehicles')
     .update({ listing_status: 'archived', listing_active: false, deleted_at: new Date().toISOString() })
     .eq('id', id)
+    .select('id')
+    .maybeSingle()
   if (error) throw new Error(error.message)
+  if (!data) throw new Error('Vehicle not found or it could not be removed.')
+}
+
+/** Removes a vehicle from the catalog so it can be re-added fresh later (soft delete). */
+export async function deleteVehicle(id: string, actorId: string): Promise<void> {
+  const supabase = getSupabaseClient()
+  const {
+    data: { user },
+    error: sessionError,
+  } = await supabase.auth.getUser()
+  if (sessionError || !user) {
+    throw new Error('Your session expired. Please sign in again.')
+  }
+  if (actorId && actorId !== user.id) {
+    throw new Error('Your session is out of date. Please sign out, sign in again, then retry.')
+  }
+
+  const actor = await getActor(user.id)
+  if (!actor || actor.role !== 'admin') {
+    throw new Error('Only an administrator can remove a vehicle.')
+  }
+
+  const { error: rpcError } = await supabase.rpc('admin_remove_vehicle', { p_vehicle_id: id })
+  if (!rpcError) return
+  if (!rpcMissing(rpcError)) throw new Error(rpcError.message)
+
+  await softDeleteVehicleDirect(id, supabase)
 }
 
 /** @deprecated Use deleteVehicle */

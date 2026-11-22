@@ -16,6 +16,11 @@ const FRIENDLY_ALREADY = [
   'this vehicle could not',
   'open it from available cars',
   'something went wrong',
+  'session expired',
+  'sign in again',
+  'only an administrator',
+  'session is out of date',
+  'vehicle not found or it could not be removed',
 ]
 
 function looksCustomerReady(message: string) {
@@ -39,7 +44,7 @@ export function friendlyErrorMessage(error: unknown, context: ErrorContext = 'ge
 
   if (lower.includes('row-level security') || lower.includes('permission denied') || lower.includes('not allowed')) {
     if (context === 'vehicle') {
-      return 'We could not save or update this vehicle. Please sign in as an admin or owner, then try again.'
+      return 'We could not remove or update this vehicle. Please sign out, sign in with your admin account, and try again.'
     }
     if (context === 'booking') {
       return 'We could not complete your booking request. Please sign in and try again, or contact us for help.'
