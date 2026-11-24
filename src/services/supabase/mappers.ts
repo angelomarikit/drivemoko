@@ -111,6 +111,8 @@ type BookingRow = {
   addon_child_seat: boolean
   special_request: string
   document_storage_path: string | null
+  valid_id_storage_path?: string | null
+  proof_of_billing_storage_path?: string | null
   contract_storage_path: string | null
   contract_signed_at: string | null
   contract_signer_name: string | null
@@ -309,6 +311,8 @@ export function mapBooking(row: BookingRow, historyRows: HistoryRow[]): Booking 
     addons: mapAddons(row),
     specialRequest: row.special_request,
     documentName: row.document_storage_path ?? undefined,
+    validIdStoragePath: row.valid_id_storage_path ?? undefined,
+    proofOfBillingStoragePath: row.proof_of_billing_storage_path ?? undefined,
     contractStoragePath: row.contract_storage_path ?? undefined,
     contractSignedAt: row.contract_signed_at ?? undefined,
     contractSignerName: row.contract_signer_name ?? undefined,

@@ -31,6 +31,12 @@ import { dayAvailability, vehicleDayMap } from '@/utils/vehicleAvailability'
 import { cn } from '@/utils/cn'
 import { findVehicleByParam, isUuid, resolveVehicleForBooking } from '@/utils/vehicleParam'
 
+const RENTER_DOC_ACCEPT = 'image/jpeg,image/png,image/webp,application/pdf'
+
+type RenterDocSlot = 'license' | 'validId' | 'proofOfBilling'
+
+type PickedRenterDoc = { file: File; preview?: string }
+
 const customerSchema = z.object({
   name: z.string().min(2, 'Enter the renter name'),
   email: z.string().email('Enter a valid email'),
@@ -80,8 +86,8 @@ export function BookingPage() {
     params.get('driverZone') === 'outside' ? 'outside' : 'inside',
   )
   const [request, setRequest] = useState('')
-  const [documentName, setDocumentName] = useState('')
-  const [preview, setPreview] = useState('')
+  const [renterDocs, setRenterDocs] = useState<Partial<Record<RenterDocSlot, PickedRenterDoc>>>({})
+  const [renterDocError, setRenterDocError] = useState('')
   const [done, setDone] = useState<Booking | null>(null)
   const [scheduleError, setScheduleError] = useState('')
   const [contractOpen, setContractOpen] = useState(false)
@@ -139,11 +145,30 @@ export function BookingPage() {
     setStep(1)
   }
 
+  const pickRenterDoc = (slot: RenterDocSlot, file: File) => {
+    setRenterDocs((current) => {
+      const oldPreview = current[slot]?.preview
+      if (oldPreview) URL.revokeObjectURL(oldPreview)
+      const preview = file.type.startsWith('image/') ? URL.createObjectURL(file) : undefined
+      return { ...current, [slot]: { file, preview } }
+    })
+    setRenterDocError('')
+  }
+
   const submitInfo = form.handleSubmit((values) => {
     if (!withDriver && !values.licenseNumber?.trim()) {
       form.setError('licenseNumber', { message: 'A license number is required for self-drive' })
       return
     }
+    const missing: string[] = []
+    if (!renterDocs.license) missing.push("driver's license photo")
+    if (!renterDocs.validId) missing.push('valid ID')
+    if (!renterDocs.proofOfBilling) missing.push('proof of billing or barangay clearance')
+    if (missing.length) {
+      setRenterDocError(`Please upload: ${missing.join(', ')}.`)
+      return
+    }
+    setRenterDocError('')
     setStep(2)
   })
 
@@ -163,7 +188,11 @@ export function BookingPage() {
       driverZone: withDriver ? driverZone : undefined,
       addons: emptyAddons(),
       specialRequest: request,
-      documentName: documentName || undefined,
+      renterDocuments: {
+        license: renterDocs.license?.file,
+        validId: renterDocs.validId?.file,
+        proofOfBilling: renterDocs.proofOfBilling?.file,
+      },
       contract: contractDraft,
     })
     if (booking) {
@@ -243,24 +272,35 @@ export function BookingPage() {
                       placeholder={fulfillmentMode === 'delivery' ? 'Street, barangay, municipality' : 'Your address'}
                     />
                   </label>
-                  <label><FieldLabel required={!withDriver}>Driver&apos;s License</FieldLabel><TextInput {...form.register('licenseNumber')} placeholder="License number only" /></label>
-                  <div>
-                    <FieldLabel>License photo (optional)</FieldLabel>
-                    <div className="mt-1 flex flex-wrap items-center gap-2">
-                      <FileUploadButton
-                        label={documentName ? 'Change photo' : 'Upload license photo'}
-                        accept="image/*"
-                        variant="primary"
-                        onPick={(file) => {
-                          setDocumentName(file.name)
-                          setPreview(URL.createObjectURL(file))
-                        }}
-                      />
-                      {documentName ? <span className="text-xs font-medium text-ink">{documentName}</span> : null}
-                    </div>
-                    <p className="mt-1.5 text-xs text-muted">JPEG or PNG. Stored with your booking request for admin review.</p>
-                  </div>
-                  {preview ? <img src={preview} alt="Local license preview" className="h-24 rounded-xl object-cover md:col-span-2" /> : null}
+                  <label><FieldLabel required={!withDriver}>Driver&apos;s License #</FieldLabel><TextInput {...form.register('licenseNumber')} placeholder="License number" /></label>
+                  <label className="md:col-span-2">
+                    <FieldLabel required>Verification documents</FieldLabel>
+                    <p className="mt-0.5 text-xs text-muted">
+                      Upload clear photos or PDF scans (JPEG, PNG, WebP, or PDF). Files are stored with your booking for admin review.
+                    </p>
+                  </label>
+                  <RenterDocumentUpload
+                    className="md:col-span-2"
+                    label="Driver's license"
+                    required
+                    picked={renterDocs.license}
+                    onPick={(file) => pickRenterDoc('license', file)}
+                  />
+                  <RenterDocumentUpload
+                    className="md:col-span-2"
+                    label="Valid ID (renter)"
+                    required
+                    picked={renterDocs.validId}
+                    onPick={(file) => pickRenterDoc('validId', file)}
+                  />
+                  <RenterDocumentUpload
+                    className="md:col-span-2"
+                    label="Proof of billing or barangay clearance"
+                    required
+                    picked={renterDocs.proofOfBilling}
+                    onPick={(file) => pickRenterDoc('proofOfBilling', file)}
+                  />
+                  {renterDocError ? <div className="md:col-span-2"><ErrorText>{renterDocError}</ErrorText></div> : null}
                   <label><FieldLabel required>Emergency Contact</FieldLabel><TextInput {...form.register('emergencyName')} /></label>
                   <label><FieldLabel required>Emergency Number</FieldLabel><TextInput {...form.register('emergencyPhone')} /></label>
                   <label className="flex items-start gap-2 text-sm md:col-span-2"><input type="checkbox" {...form.register('terms')} /> I agree to the rental terms and conditions.</label>
@@ -384,6 +424,38 @@ export function BookingPage() {
           </div>
         ) : null}
       </div>
+    </div>
+  )
+}
+
+function RenterDocumentUpload({
+  label,
+  required,
+  picked,
+  onPick,
+  className,
+}: {
+  label: string
+  required?: boolean
+  picked?: PickedRenterDoc
+  onPick: (file: File) => void
+  className?: string
+}) {
+  return (
+    <div className={cn('rounded-2xl border border-slate-100 bg-slate-50/60 p-3', className)}>
+      <FieldLabel required={required}>{label}</FieldLabel>
+      <div className="mt-2 flex flex-wrap items-center gap-2">
+        <FileUploadButton
+          label={picked ? 'Change file' : 'Upload file'}
+          accept={RENTER_DOC_ACCEPT}
+          variant="primary"
+          onPick={onPick}
+        />
+        {picked ? <span className="text-xs font-medium text-ink">{picked.file.name}</span> : null}
+      </div>
+      {picked?.preview ? (
+        <img src={picked.preview} alt="" className="mt-2 h-24 max-w-xs rounded-xl border border-white object-cover shadow-sm" />
+      ) : null}
     </div>
   )
 }

@@ -135,7 +135,10 @@ export interface Booking {
   rentalType: RentalType
   addons: BookingAddons
   specialRequest: string
+  /** Driver license scan in `rental-documents` bucket. */
   documentName?: string
+  validIdStoragePath?: string
+  proofOfBillingStoragePath?: string
   status: BookingStatus
   paymentStatus: PaymentStatus
   pricing: PriceBreakdown
@@ -296,6 +299,12 @@ export interface CustomerDraft {
   emergencyPhone?: string
 }
 
+export type BookingRenterDocumentFiles = {
+  license?: File
+  validId?: File
+  proofOfBilling?: File
+}
+
 export interface CreateBookingInput {
   vehicleId: string
   customerId?: string
@@ -310,7 +319,9 @@ export interface CreateBookingInput {
   driverZone?: 'inside' | 'outside'
   addons: BookingAddons
   specialRequest: string
+  /** @deprecated Use renterDocuments — kept for mock filenames when files omitted */
   documentName?: string
+  renterDocuments?: BookingRenterDocumentFiles
   /** Signed contract payload (reference added when the booking is created). */
   contract?: import('@/utils/rentalContract').RentalContractData
   actorId: string | null

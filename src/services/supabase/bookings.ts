@@ -5,6 +5,7 @@ import { mapBooking, mapVehicle } from '@/services/supabase/mappers'
 import type { Booking, BookingStatus, CreateBookingInput } from '@/types'
 import { enqueueBookingStatusEmails } from '@/services/notifications/outbox'
 import { canTransition, scheduleIssues } from '@/utils/bookingRules'
+import { persistRenterDocuments } from '@/services/bookingDocuments'
 import { persistBookingContract } from '@/services/bookingContract'
 import { quotePackage } from '@/utils/pricing'
 import { resolveRentalPackage } from '@/utils/rentalPackage'
@@ -82,6 +83,26 @@ async function findPendingBookingInDatabase(
 
   if (!exact?.id || !isUuid(exact.id)) return null
   return mapBooking(exact as Parameters<typeof mapBooking>[0], [])
+}
+
+async function attachRenterDocuments(
+  supabase: ReturnType<typeof getSupabaseClient>,
+  bookingId: string,
+  input: CreateBookingInput,
+) {
+  if (!input.renterDocuments) return
+  const paths = await persistRenterDocuments(bookingId, input.renterDocuments)
+  if (!paths.license && !paths.validId && !paths.proofOfBilling) return
+
+  const { error } = await supabase
+    .from('bookings')
+    .update({
+      document_storage_path: paths.license ?? input.documentName ?? null,
+      valid_id_storage_path: paths.validId ?? null,
+      proof_of_billing_storage_path: paths.proofOfBilling ?? null,
+    })
+    .eq('id', bookingId)
+  if (error) throw new Error(error.message)
 }
 
 async function attachBookingContract(
@@ -193,7 +214,7 @@ export async function createBooking(input: CreateBookingInput): Promise<Booking>
       addon_with_driver: input.addons.withDriver,
       addon_child_seat: input.addons.childSeat,
       special_request: input.specialRequest,
-      document_storage_path: input.documentName || null,
+      document_storage_path: null,
       status: 'pending',
       payment_status: 'unpaid',
       price_days: pricing.days,
@@ -214,6 +235,8 @@ export async function createBooking(input: CreateBookingInput): Promise<Booking>
     throw new Error(error.message)
   }
 
+  await attachRenterDocuments(supabase, row.id, input)
+
   if (input.contract) {
     const contractMeta = await attachBookingContract(supabase, row, input.contract)
     row.id = contractMeta.id
@@ -222,7 +245,11 @@ export async function createBooking(input: CreateBookingInput): Promise<Booking>
     row.contract_signer_name = contractMeta.contract_signer_name
   }
 
-  return mapBooking(row as Parameters<typeof mapBooking>[0], [
+  const { data: refreshed, error: refreshError } = await supabase.from('bookings').select('*').eq('id', row.id).single()
+  if (refreshError) throw new Error(refreshError.message)
+  const bookingRow = (refreshed ?? row) as Parameters<typeof mapBooking>[0]
+
+  return mapBooking(bookingRow, [
     {
       booking_id: row.id,
       previous_status: null,
@@ -255,7 +282,6 @@ async function resumePendingBooking(
       addon_with_driver: input.addons.withDriver,
       addon_child_seat: input.addons.childSeat,
       special_request: input.specialRequest,
-      document_storage_path: input.documentName || null,
       price_days: pricing.days,
       price_daily_rate_centavos: Math.round(pricing.dailyRate * 100),
       price_base_centavos: Math.round(pricing.base * 100),
@@ -273,6 +299,8 @@ async function resumePendingBooking(
     throw new Error('Could not update your pending booking. Refresh and try again.')
   }
 
+  await attachRenterDocuments(supabase, row.id, input)
+
   if (input.contract) {
     const contractMeta = await attachBookingContract(supabase, row, input.contract)
     row.id = contractMeta.id
@@ -281,8 +309,12 @@ async function resumePendingBooking(
     row.contract_signer_name = contractMeta.contract_signer_name
   }
 
+  const { data: refreshed, error: refreshError } = await supabase.from('bookings').select('*').eq('id', row.id).single()
+  if (refreshError) throw new Error(refreshError.message)
+  const bookingRow = (refreshed ?? row) as Parameters<typeof mapBooking>[0]
+
   const prior = snap.bookings.find((item) => item.id === row.id)
-  const booking = mapBooking(row as Parameters<typeof mapBooking>[0], [])
+  const booking = mapBooking(bookingRow, [])
   if (prior?.history.length) booking.history = prior.history
   return booking
 }

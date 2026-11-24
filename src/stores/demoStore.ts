@@ -3,6 +3,7 @@ import { persist } from 'zustand/middleware'
 import { createFullSeed, createMinimalSeed } from '@/data/seed'
 import { isSupabaseProvider } from '@/lib/config'
 import { createBooking as createSupabaseBooking } from '@/services/supabase/bookings'
+import { persistRenterDocuments } from '@/services/bookingDocuments'
 import { persistBookingContract } from '@/services/bookingContract'
 import type {
   ApplicationInput,
@@ -218,13 +219,18 @@ export const useDemoStore = create<DemoState>()(
             contractSignedAt = saved.contractSignedAt
             contractSignerName = saved.contractSignerName
           }
+          const docPaths = input.renterDocuments
+            ? await persistRenterDocuments(existingPending.id, input.renterDocuments)
+            : {}
           const booking: Booking = {
             ...existingPending,
             pickupLocation: input.pickupLocation,
             rentalType: input.rentalType,
             addons: input.addons,
             specialRequest: input.specialRequest,
-            documentName: input.documentName,
+            documentName: docPaths.license ?? input.documentName,
+            validIdStoragePath: docPaths.validId,
+            proofOfBillingStoragePath: docPaths.proofOfBilling,
             pricing,
             contractStoragePath,
             contractSignedAt,
@@ -243,8 +249,10 @@ export const useDemoStore = create<DemoState>()(
           seq += 1
           reference = `DM-2026-${String(seq).padStart(4, '0')}`
         }
+        const bookingId = uid('bkg')
+        const docPaths = input.renterDocuments ? await persistRenterDocuments(bookingId, input.renterDocuments) : {}
         const booking: Booking = {
-          id: uid('bkg'),
+          id: bookingId,
           reference,
           vehicleId: vehicle.id,
           customerId,
@@ -256,7 +264,9 @@ export const useDemoStore = create<DemoState>()(
           rentalType: input.rentalType,
           addons: input.addons,
           specialRequest: input.specialRequest,
-          documentName: input.documentName,
+          documentName: docPaths.license ?? input.documentName,
+          validIdStoragePath: docPaths.validId,
+          proofOfBillingStoragePath: docPaths.proofOfBilling,
           status: 'pending',
           paymentStatus: 'unpaid',
           pricing,
