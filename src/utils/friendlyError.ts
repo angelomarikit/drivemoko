@@ -4,6 +4,7 @@ const FRIENDLY_ALREADY = [
   'those dates overlap',
   'those dates are no longer',
   'you already have pending',
+  'signed in as staff',
   'please upload',
   'choose a password',
   'at least 8 characters',
@@ -48,12 +49,24 @@ export function friendlyErrorMessage(error: unknown, context: ErrorContext = 'ge
 
   const lower = raw.toLowerCase()
 
+  if (
+    lower.includes('bookings_no_overlap') ||
+    lower.includes('23p01') ||
+    lower.includes('exclusion constraint') ||
+    (lower.includes('conflicting key') && lower.includes('exclusion'))
+  ) {
+    return 'Those dates are no longer available for this vehicle. Pick different dates and try again.'
+  }
+
   if (lower.includes('row-level security') || lower.includes('permission denied') || lower.includes('not allowed')) {
     if (context === 'vehicle') {
       return 'We could not remove or update this vehicle. Please sign out, sign in with your admin account, and try again.'
     }
     if (context === 'booking') {
-      return 'We could not complete your booking request. Please sign in and try again, or contact us for help.'
+      if (lower.includes('storage') || lower.includes('bucket')) {
+        return 'We could not upload your verification files. Sign in with your customer account and try again, or contact us for help.'
+      }
+      return 'This account cannot finish an online booking. Sign out, book as a customer (or use guest checkout), or contact Drive Moko for help.'
     }
     if (context === 'payment') {
       return 'We could not record this payment. Please try again or ask an administrator for help.'

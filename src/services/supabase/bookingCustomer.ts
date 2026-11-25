@@ -5,6 +5,8 @@ import type { CustomerDraft } from '@/types'
 
 async function syncCustomerProfile(customerId: string, customer: CustomerDraft) {
   const supabase = getSupabaseClient()
+  const { data: authData } = await supabase.auth.getSession()
+  if (authData.session?.user?.id !== customerId) return
   await supabase
     .from('profiles')
     .update({
@@ -49,7 +51,9 @@ export async function resolveBookingCustomerId(
       return activateCustomerSession(profile.id, customer)
     }
     if (profile) {
-      throw new Error('You are signed in as staff. Sign out to book as a guest, or use a customer account.')
+      throw new Error(
+        'You are signed in as staff. Sign out, then book with guest checkout, or create the booking under Admin → Bookings.',
+      )
     }
   }
 

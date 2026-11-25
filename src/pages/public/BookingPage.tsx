@@ -31,6 +31,7 @@ import { resolveRentalPackage } from '@/utils/rentalPackage'
 import { dayAvailability, vehicleDayMap } from '@/utils/vehicleAvailability'
 import { cn } from '@/utils/cn'
 import { findVehicleByParam, isUuid, resolveVehicleForBooking } from '@/utils/vehicleParam'
+import { friendlyErrorMessage } from '@/utils/friendlyError'
 
 const RENTER_DOC_ACCEPT = 'image/jpeg,image/png,image/webp,application/pdf'
 
@@ -58,7 +59,7 @@ const steps = ['Rental Details', 'Your Information', 'Review & Confirm', 'Bookin
 export function BookingPage() {
   const { vehicleId } = useParams()
   const [params] = useSearchParams()
-  const { data } = useSnapshot()
+  const { data, refetch } = useSnapshot()
   const session = useSession()
   const actions = useDemoActions()
   const navigate = useNavigate()
@@ -204,6 +205,7 @@ export function BookingPage() {
       setStep(1)
       return
     }
+    const fresh = (await refetch()).data ?? data
     const clash = scheduleIssues(
       {
         vehicleId: vehicle.id,
@@ -214,7 +216,7 @@ export function BookingPage() {
         rentalType,
         customerId: session?.role === 'customer' ? session.id : undefined,
       },
-      data,
+      fresh,
     )
     if (clash.length) {
       setScheduleError(clash[0])
@@ -222,6 +224,7 @@ export function BookingPage() {
       return
     }
     setConfirming(true)
+    setScheduleError('')
     try {
     const booking = await actions.createBooking({
       vehicleId: vehicleId ?? vehicle.id,
@@ -256,6 +259,12 @@ export function BookingPage() {
       setDone(booking)
       setStep(3)
     }
+    } catch (error) {
+      const msg = friendlyErrorMessage(error, 'booking')
+      if (/dates are no longer|overlap|not available for this vehicle/i.test(msg)) {
+        setScheduleError(msg)
+        setStep(0)
+      }
     } finally {
       setConfirming(false)
     }
@@ -274,6 +283,12 @@ export function BookingPage() {
         </div>
       </section>
       <div className="mx-auto max-w-5xl px-4">
+        {session && session.role !== 'customer' ? (
+          <p className="mb-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+            You are signed in as <strong>{session.role}</strong>. Public checkout is for <strong>customers</strong> only — sign out and use guest
+            checkout, or add a booking in the dashboard under <strong>Bookings</strong>.
+          </p>
+        ) : null}
         <ol className="my-6 grid grid-cols-4 gap-2 text-center text-xs font-bold sm:text-sm">
           {steps.map((label, index) => (
             <li key={label} className="flex flex-col items-center gap-2">

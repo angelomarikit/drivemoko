@@ -294,12 +294,18 @@ export async function createBooking(input: CreateBookingInput): Promise<Booking>
     .single()
 
   if (error) {
-    if (error.message.includes('bookings_no_overlap') || error.code === '23P01') {
+    const overlap =
+      error.code === '23P01' ||
+      /bookings_no_overlap|exclusion constraint|conflicting key/i.test(error.message)
+    if (overlap) {
       const sameCustomer = await findLatestCustomerPendingOnVehicle(supabase, customerId, vehicleId)
       if (sameCustomer) {
         return resumePendingBooking(supabase, sameCustomer, input, pricing, snap)
       }
       throw new Error('Those dates are no longer available for this vehicle. Pick different dates and try again.')
+    }
+    if (/row-level security|permission denied|42501/i.test(error.message)) {
+      throw new Error('This account cannot finish an online booking. Sign out and book as a customer, or contact Drive Moko for help.')
     }
     throw new Error(error.message)
   }
