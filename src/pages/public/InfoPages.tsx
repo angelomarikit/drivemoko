@@ -1,12 +1,14 @@
 import * as Accordion from '@radix-ui/react-accordion'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Check, ChevronDown, Handshake, Send } from 'lucide-react'
+import { BadgePercent, Check, ChevronDown, Handshake, Headset, Send, ShieldCheck, TrendingUp } from 'lucide-react'
+import type { LucideIcon } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import { z } from 'zod'
 import { Button } from '@/components/ui/Button'
 import { ErrorText, FieldLabel, SelectInput, TextArea, TextInput } from '@/components/ui/Fields'
 import { BRAND, FAQS, REQUIREMENTS } from '@/constants/content'
 import { useDemoActions } from '@/hooks/useDemo'
+import { PARTNER_COMMISSION_PERCENT } from '@/utils/partnerShare'
 
 const partnerSchema = z.object({
   fullName: z.string().min(2, 'Enter your name'),
@@ -18,6 +20,36 @@ const partnerSchema = z.object({
   vehicleCount: z.coerce.number().min(1, 'Enter at least 1'),
   notes: z.string().optional(),
 })
+
+const PARTNER_BENEFITS: { title: string; body: string; icon: LucideIcon }[] = [
+  {
+    title: 'Trusted & secured',
+    body: 'Your vehicle appears on the Drive Moko desk with confirmed reservations and clear renter details.',
+    icon: ShieldCheck,
+  },
+  {
+    title: 'More bookings',
+    body: 'Travelers searching Nueva Vizcaya and nearby routes can request your vehicle once it is approved.',
+    icon: TrendingUp,
+  },
+  {
+    title: 'Clear earnings',
+    body: `You earn ${PARTNER_COMMISSION_PERCENT}% of each booking total—one simple partner commission, no per-link setup.`,
+    icon: BadgePercent,
+  },
+  {
+    title: 'Dedicated support',
+    body: 'Our admin team reviews applications, verifies listings, and helps you go live on the public catalog.',
+    icon: Headset,
+  },
+]
+
+const PARTNER_STEPS = [
+  { title: 'Submit application', body: 'Tell us about you, your vehicle, and how many units you want to list.' },
+  { title: 'Vehicle verification', body: 'We review details and coordinate anything needed before listing.' },
+  { title: 'Get listed', body: 'After approval, your car shows on Available Cars with your rental packages.' },
+  { title: 'Start earning', body: `Completed rentals accrue your ${PARTNER_COMMISSION_PERCENT}% partner commission on the booking total.` },
+]
 
 const contactSchema = z.object({
   name: z.string().min(2),
@@ -60,13 +92,17 @@ export function PartnerPage() {
       <section className="relative min-h-[560px] overflow-hidden bg-navy text-white">
         <img src="/vehicles/hero.jpg" alt="" className="absolute inset-0 h-full w-full object-cover opacity-70" />
         <div className="absolute inset-0 bg-gradient-to-r from-navy via-navy/75 to-navy/30" />
-        <div className="relative mx-auto grid max-w-[1440px] items-start gap-6 px-4 py-12 lg:grid-cols-[1.1fr_420px]">
+        <div className="relative mx-auto grid max-w-[1440px] items-start gap-6 px-4 py-12 pb-16 lg:grid-cols-[1.1fr_420px] lg:pb-20">
           <div>
             <h1 className="max-w-xl text-5xl font-black italic leading-tight">Become a Drive Moko <span className="text-gold">Partner</span></h1>
             <p className="mt-4 max-w-md text-white/85">Own a car and want to earn more? List your vehicle with Drive Moko and let it work for you!</p>
-            <div className="mt-6 flex flex-wrap gap-4 text-sm font-bold">
-              <span>Earn Extra Income</span><span>We Handle the Bookings</span><span>Grow Your Vehicle Investment</span>
-            </div>
+            <ul className="mt-6 flex flex-wrap gap-2">
+              {['Earn extra income', 'We handle bookings', 'Grow your fleet'].map((item) => (
+                <li key={item} className="rounded-full border border-white/25 bg-white/10 px-3 py-1 text-sm font-semibold text-white/95 backdrop-blur-sm">
+                  {item}
+                </li>
+              ))}
+            </ul>
           </div>
           <form
             className="rounded-3xl bg-white p-5 text-ink shadow-xl"
@@ -100,27 +136,42 @@ export function PartnerPage() {
           </form>
         </div>
       </section>
-      <div className="mx-auto -mt-8 max-w-5xl rounded-3xl bg-white p-6 shadow-sm">
-        <h2 className="text-center text-2xl font-extrabold">Why Partner with Drive Moko?</h2>
-        <div className="mt-5 grid gap-4 md:grid-cols-4">
-          {[
-            ['Trusted & Secured', 'Your vehicle is listed on the Drive Moko rental desk with clear reservations.'],
-            ['More Bookings', 'Customers searching Nueva Vizcaya can request your approved unit.'],
-            ['Flexible Setup', 'Rates and the partner share are configured, not locked in the layout.'],
-            ['Dedicated Support', 'Administrators approve the listing before it appears publicly.'],
-          ].map(([title, body]) => (
-            <div key={title}><p className="font-bold">{title}</p><p className="mt-1 text-sm text-muted">{body}</p></div>
-          ))}
+
+      <section className="relative z-10 -mt-10 px-4 lg:-mt-14">
+        <div className="mx-auto max-w-[1440px] rounded-3xl border border-black/5 bg-white p-6 shadow-lg md:p-10">
+          <div className="mx-auto max-w-2xl text-center">
+            <h2 className="text-2xl font-extrabold text-ink md:text-3xl">Why Partner with Drive Moko?</h2>
+            <p className="mt-2 text-sm text-muted md:text-base">List with a local desk travelers already trust—clear reservations, fair commission, and admin support from application to go-live.</p>
+          </div>
+          <ul className="mt-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            {PARTNER_BENEFITS.map(({ title, body, icon: Icon }) => (
+              <li key={title} className="flex h-full flex-col rounded-2xl bg-canvas p-5">
+                <span className="grid h-11 w-11 place-items-center rounded-xl bg-navy text-gold">
+                  <Icon className="h-5 w-5" aria-hidden />
+                </span>
+                <h3 className="mt-4 text-base font-extrabold text-ink">{title}</h3>
+                <p className="mt-2 flex-1 text-sm leading-relaxed text-muted">{body}</p>
+              </li>
+            ))}
+          </ul>
         </div>
-      </div>
-      <div className="mx-auto mt-6 max-w-5xl rounded-3xl bg-navy p-6 text-white">
-        <h2 className="text-2xl font-extrabold">How to Become a Partner</h2>
-        <div className="mt-4 grid gap-3 md:grid-cols-4">
-          {['Submit Application', 'Vehicle Verification', 'Get Listed', 'Start Earning'].map((title, index) => (
-            <div key={title} className="rounded-2xl bg-white/10 p-3 text-sm"><span className="font-bold text-gold">{index + 1}.</span> {title}</div>
-          ))}
+      </section>
+
+      <section className="mx-auto mt-10 max-w-[1440px] px-4">
+        <div className="overflow-hidden rounded-3xl bg-navy p-6 text-white md:p-10">
+          <h2 className="text-2xl font-extrabold md:text-3xl">How to Become a Partner</h2>
+          <p className="mt-2 max-w-2xl text-sm text-white/75">Four steps from application to your first booking.</p>
+          <ol className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {PARTNER_STEPS.map(({ title, body }, index) => (
+              <li key={title} className="rounded-2xl border border-white/10 bg-white/5 p-5">
+                <span className="grid h-10 w-10 place-items-center rounded-full bg-gold text-sm font-extrabold text-navy">{index + 1}</span>
+                <h3 className="mt-3 font-bold">{title}</h3>
+                <p className="mt-2 text-sm leading-relaxed text-white/75">{body}</p>
+              </li>
+            ))}
+          </ol>
         </div>
-      </div>
+      </section>
     </div>
   )
 }
