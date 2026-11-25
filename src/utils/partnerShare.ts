@@ -1,41 +1,16 @@
-import type { Booking, RentalPackage, Settings, User, Vehicle } from '@/types'
-import { packageDailyRate } from '@/utils/rentalPackage'
+import type { Booking } from '@/types'
 
-/** Default fixed partner earnings per rental day (admin can override per partner). */
-export const DEFAULT_PARTNER_FIXED_SHARE: RentalPackage = {
-  rateFirstDay: 2000,
-  rateSucceeding: 1500,
-  rate10Days: 1300,
-  rate15Plus: 1200,
+/** Fixed commission split on booking quote total (`pricing.total`). */
+export const PARTNER_COMMISSION_RATE = 0.7
+export const COMPANY_COMMISSION_RATE = 0.3
+
+export const PARTNER_COMMISSION_PERCENT = 70
+export const COMPANY_COMMISSION_PERCENT = 30
+
+export function partnerCommissionForBooking(booking: Booking): number {
+  return Math.round(booking.pricing.total * PARTNER_COMMISSION_RATE)
 }
 
-export function resolvePartnerFixedShare(partner: User | undefined, settings: Settings): RentalPackage {
-  return partner?.partnerProfile?.fixedShare ?? settings.defaultPartnerFixedShare ?? DEFAULT_PARTNER_FIXED_SHARE
-}
-
-/** Partner payout for a booking using fixed per-day tiers (not % of gross). */
-export function fixedShareTotalForBooking(
-  booking: Booking,
-  partner: User | undefined,
-  settings: Settings,
-): number {
-  const pkg = resolvePartnerFixedShare(partner, settings)
-  const days = Math.max(1, booking.pricing.days)
-  let total = 0
-  for (let day = 1; day <= days; day++) {
-    total += packageDailyRate(pkg, day, days)
-  }
-  return Math.round(total)
-}
-
-export function fixedShareForVehiclePartner(
-  vehicle: Vehicle | undefined,
-  users: User[],
-  settings: Settings,
-  viewerId: string,
-) {
-  if (!vehicle?.partnerId) return resolvePartnerFixedShare(undefined, settings)
-  const partner = users.find((user) => user.id === vehicle.partnerId)
-  if (vehicle.partnerId !== viewerId) return resolvePartnerFixedShare(partner, settings)
-  return resolvePartnerFixedShare(partner, settings)
+export function companyCommissionForBooking(booking: Booking): number {
+  return booking.pricing.total - partnerCommissionForBooking(booking)
 }

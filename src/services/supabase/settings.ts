@@ -17,13 +17,6 @@ export async function saveSupabaseSettings(patch: Partial<Settings>) {
     row.default_rate_10_days_centavos = Math.round(pkg.rate10Days * 100)
     row.default_rate_15_plus_centavos = Math.round(pkg.rate15Plus * 100)
   }
-  const fixed = patch.defaultPartnerFixedShare
-  if (fixed) {
-    row.default_share_first_day_centavos = Math.round(fixed.rateFirstDay * 100)
-    row.default_share_succeeding_centavos = Math.round(fixed.rateSucceeding * 100)
-    row.default_share_10_days_centavos = Math.round(fixed.rate10Days * 100)
-    row.default_share_15_plus_centavos = Math.round(fixed.rate15Plus * 100)
-  }
   const driver = patch.defaultDriverPackage
   if (driver) {
     row.driver_inside_per_day_centavos = Math.round(driver.insidePerDay * 100)

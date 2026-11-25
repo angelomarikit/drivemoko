@@ -17,7 +17,7 @@ import { eachDate, formatPretty, formatTime, manilaYmd } from '@/utils/dates'
 import { bookingKpis, dailySeries, earningsTotal, scopedBookings, scopedVehicles, shareAmount, utilization, weeklyBars } from '@/utils/metrics'
 import { formatPeso } from '@/utils/money'
 import { cn } from '@/utils/cn'
-import { resolvePartnerFixedShare } from '@/utils/partnerShare'
+import { PARTNER_COMMISSION_PERCENT } from '@/utils/partnerShare'
 import { DriverPackageRates } from '@/components/rentals/DriverPackageRates'
 import { RentalPackageRates } from '@/components/rentals/RentalPackageRates'
 import { resolveRentalPackage } from '@/utils/rentalPackage'
@@ -144,7 +144,6 @@ function FleetHome() {
       : legacyEarnings.total
   const earningsDelta = legacyEarnings.delta
   const adminPackage = resolvePartnerDashboardPackage(session, data.vehicles, data.settings)
-  const partnerFixedShare = resolvePartnerFixedShare(session, data.settings)
   const bars = weeklyBars(bookings, data.vehicles, data.users, data.settings, viewer)
   const base = '/partner'
   const today = manilaYmd()
@@ -153,13 +152,15 @@ function FleetHome() {
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         <Kpi label="Total Bookings" value={String(kpis.totalBookings)} delta={kpis.bookingsDelta} icon={CalendarDays} tone="bg-blue-100 text-info" />
         <Kpi label="Active Rentals" value={String(bookings.filter((booking) => booking.status === 'ongoing').length)} delta={kpis.activeDelta} icon={CarFront} tone="bg-emerald-100 text-success" />
-        <Kpi label="My Earnings (Share)" value={formatPeso(earningsTotalValue)} delta={earningsDelta} icon={Coins} tone="bg-amber-100 text-amber-600" />
-        <PartnerRentalPackageCard package={adminPackage} fixedShare={partnerFixedShare} />
+        <Kpi label={`My commission (${PARTNER_COMMISSION_PERCENT}%)`} value={formatPeso(earningsTotalValue)} delta={earningsDelta} icon={Coins} tone="bg-amber-100 text-amber-600" />
+        <PartnerCommissionCard package={adminPackage} />
       </div>
       {fleetRole === 'partner' ? (
         <Panel>
           <h2 className="font-bold">Customer rates (set by admin)</h2>
-          <p className="mb-3 text-xs text-muted">What renters see when booking your vehicles. Your earnings use your fixed share card above.</p>
+          <p className="mb-3 text-xs text-muted">
+            What renters see when booking your vehicles. Your earnings are {PARTNER_COMMISSION_PERCENT}% of each booking total (quote at confirm).
+          </p>
           <div className="grid gap-3 xl:grid-cols-2">
             <RentalPackageRates
               package={vehicles[0] ? resolveRentalPackage(vehicles[0], data.settings) : data.settings.defaultRentalPackage}
@@ -210,7 +211,7 @@ function FleetHome() {
           </div>
           <div className="overflow-x-auto">
             <table className="w-full min-w-[640px] text-left text-sm">
-              <thead className="text-xs text-muted"><tr><th>Booking No.</th><th>Vehicle</th><th>Rental Period</th><th>Partner Share</th><th>Status</th></tr></thead>
+              <thead className="text-xs text-muted"><tr><th>Booking No.</th><th>Vehicle</th><th>Rental Period</th><th>Your commission ({PARTNER_COMMISSION_PERCENT}%)</th><th>Status</th></tr></thead>
               <tbody>
                 {[...bookings].sort((a, b) => b.reference.localeCompare(a.reference)).slice(0, 5).map((booking) => {
                   const vehicle = data.vehicles.find((item) => item.id === booking.vehicleId)
@@ -294,13 +295,16 @@ export function CustomerHome() {
   )
 }
 
-function PartnerRentalPackageCard({ package: rates, fixedShare }: { package: RentalPackage; fixedShare: RentalPackage }) {
+function PartnerCommissionCard({ package: rates }: { package: RentalPackage }) {
   return (
     <Panel>
       <span className="grid h-10 w-10 place-items-center rounded-xl bg-canvas text-navy">
         <Tags className="h-5 w-5" />
       </span>
-      <p className="mt-3 text-sm text-muted">Customer rates</p>
+      <p className="mt-3 text-sm text-muted">Your commission</p>
+      <p className="mt-1 text-2xl font-extrabold text-success">{PARTNER_COMMISSION_PERCENT}%</p>
+      <p className="mt-1 text-xs text-muted">Of each booking total when the rental is completed (same quote the customer confirmed).</p>
+      <p className="mt-3 text-sm text-muted">Customer rates (admin)</p>
       <ul className="mt-2 space-y-1 text-sm">
         <li className="flex items-baseline justify-between gap-2">
           <span className="text-muted">1 day</span>
@@ -315,22 +319,6 @@ function PartnerRentalPackageCard({ package: rates, fixedShare }: { package: Ren
           <span className="font-extrabold text-ink">{formatPeso(rates.rate10Days)}</span>
         </li>
       </ul>
-      <p className="mt-3 text-sm text-muted">Your fixed share</p>
-      <ul className="mt-1 space-y-1 text-sm">
-        <li className="flex items-baseline justify-between gap-2">
-          <span className="text-muted">1 day</span>
-          <span className="font-extrabold text-success">{formatPeso(fixedShare.rateFirstDay)}</span>
-        </li>
-        <li className="flex items-baseline justify-between gap-2">
-          <span className="text-muted">2–5 days</span>
-          <span className="font-extrabold text-success">{formatPeso(fixedShare.rateSucceeding)}</span>
-        </li>
-        <li className="flex items-baseline justify-between gap-2">
-          <span className="text-muted">10+ days</span>
-          <span className="font-extrabold text-success">{formatPeso(fixedShare.rate10Days)}</span>
-        </li>
-      </ul>
-      <p className="mt-2 text-xs text-muted">Set by Drive Moko admin</p>
     </Panel>
   )
 }

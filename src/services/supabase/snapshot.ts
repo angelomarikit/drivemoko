@@ -129,7 +129,6 @@ export async function fetchSupabaseSnapshot(): Promise<DemoData> {
       security_deposit_centavos?: number
     }
     const pkgDefault = DEFAULT_SETTINGS.defaultRentalPackage
-    const shareDefault = DEFAULT_SETTINGS.defaultPartnerFixedShare
     const driverDefault = DEFAULT_SETTINGS.defaultDriverPackage
     const toPeso = (centavos: number | undefined, fallback: number) =>
       (centavos ?? Math.round(fallback * 100)) / 100
@@ -145,12 +144,6 @@ export async function fetchSupabaseSnapshot(): Promise<DemoData> {
         rateSucceeding: toPeso(row.default_rate_succeeding_centavos, pkgDefault.rateSucceeding),
         rate10Days: toPeso(row.default_rate_10_days_centavos, pkgDefault.rate10Days),
         rate15Plus: toPeso(row.default_rate_15_plus_centavos, pkgDefault.rate15Plus),
-      },
-      defaultPartnerFixedShare: {
-        rateFirstDay: toPeso(row.default_share_first_day_centavos, shareDefault.rateFirstDay),
-        rateSucceeding: toPeso(row.default_share_succeeding_centavos, shareDefault.rateSucceeding),
-        rate10Days: toPeso(row.default_share_10_days_centavos, shareDefault.rate10Days),
-        rate15Plus: toPeso(row.default_share_15_plus_centavos, shareDefault.rate15Plus),
       },
       defaultDriverPackage: {
         insidePerDay: toPeso(row.driver_inside_per_day_centavos, driverDefault.insidePerDay),

@@ -1,13 +1,12 @@
 import type { DemoData, Settings, SmsTemplate } from '@/types'
 import { DEFAULT_DRIVER_PACKAGE } from '@/utils/driverPackage'
-import { DEFAULT_PARTNER_FIXED_SHARE } from '@/utils/partnerShare'
+import { COMPANY_COMMISSION_PERCENT, PARTNER_COMMISSION_PERCENT } from '@/utils/partnerShare'
 import { DEFAULT_RENTAL_PACKAGE } from '@/utils/rentalPackage'
 
 export const DEFAULT_SETTINGS: Settings = {
   holdPendingBookings: true,
-  companyCommissionRate: 30,
-  defaultPartnerShare: 70,
-  defaultPartnerFixedShare: { ...DEFAULT_PARTNER_FIXED_SHARE },
+  companyCommissionRate: COMPANY_COMMISSION_PERCENT,
+  defaultPartnerShare: PARTNER_COMMISSION_PERCENT,
   ownersCanBlockAvailability: true,
   smsSenderName: 'DriveMoko',
   locations: [

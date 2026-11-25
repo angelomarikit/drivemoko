@@ -1,8 +1,8 @@
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Copy, KeyRound, UserPlus } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import { friendlyErrorMessage } from '@/utils/friendlyError'
 import { z } from 'zod'
@@ -19,6 +19,7 @@ import {
   PARTNER_EMAIL_DOMAIN,
 } from '@/services/supabase/partnerProvisioning'
 import { manilaYmd } from '@/utils/dates'
+import { PARTNER_COMMISSION_PERCENT } from '@/utils/partnerShare'
 
 const schema = z.object({
   emailLocal: z
@@ -43,6 +44,7 @@ const schema = z.object({
 type FormValues = z.infer<typeof schema>
 
 export function RegisterPartnerPage() {
+  const [searchParams] = useSearchParams()
   const actions = useDemoActions()
   const [busy, setBusy] = useState(false)
   const [result, setResult] = useState<{ email: string; password: string } | null>(null)
@@ -60,6 +62,31 @@ export function RegisterPartnerPage() {
       contractReference: '',
     },
   })
+
+  useEffect(() => {
+    const email = searchParams.get('email')?.trim()
+    const fromApplication = searchParams.get('name') || searchParams.get('email')
+    if (!fromApplication) return
+    const patch: Partial<FormValues> = {}
+    if (searchParams.get('name')) patch.fullName = searchParams.get('name')!
+    if (searchParams.get('phone')) patch.phone = searchParams.get('phone')!
+    if (searchParams.get('address')) patch.address = searchParams.get('address')!
+    if (searchParams.get('business')) patch.businessName = searchParams.get('business')!
+    if (searchParams.get('summary')) patch.vehicleSummary = searchParams.get('summary')!
+    if (searchParams.get('units')) patch.vehicleCount = Number(searchParams.get('units')) || 1
+    if (email) {
+      const local = email.includes('@') ? email.split('@')[0]! : email
+      patch.emailLocal = suggestEmailLocal(local) || local.toLowerCase().replace(/[^a-z0-9.-]/g, '')
+    }
+    if (searchParams.get('name') && !patch.emailLocal) {
+      patch.emailLocal = suggestEmailLocal(searchParams.get('name')!)
+    }
+    if (searchParams.get('contact')) patch.contactPerson = searchParams.get('contact')!
+    else if (patch.fullName) patch.contactPerson = patch.fullName
+    Object.entries(patch).forEach(([key, value]) => {
+      form.setValue(key as keyof FormValues, value as FormValues[keyof FormValues])
+    })
+  }, [searchParams, form])
 
   const emailLocal = form.watch('emailLocal')
   const previewEmail = emailLocal ? buildPartnerEmail(emailLocal) : `username@${PARTNER_EMAIL_DOMAIN}`
@@ -165,7 +192,7 @@ export function RegisterPartnerPage() {
                   phone: values.phone,
                   address: values.address,
                   businessName: values.businessName,
-                  shareRatePercent: 0,
+                  shareRatePercent: PARTNER_COMMISSION_PERCENT,
                   vehicleCount: values.vehicleCount,
                   ownershipType: values.ownershipType,
                   vehicleSummary: values.vehicleSummary,
@@ -249,7 +276,7 @@ export function RegisterPartnerPage() {
 
             <Section title="Agreement & fleet" />
             <p className="md:col-span-2 text-xs text-muted">
-              Partner earnings use fixed per-day amounts set under Admin → Partners → Profile (not a percentage).
+              Partner commission is fixed at {PARTNER_COMMISSION_PERCENT}% of each booking total (no per-link setup required).
             </p>
             <label>
               <FieldLabel required>Number of vehicles (units)</FieldLabel>

@@ -179,24 +179,6 @@ function mapPartnerRentalPackage(partner?: PartnerRateRow | null) {
   }
 }
 
-type PartnerShareRow = {
-  share_first_day_centavos?: number | null
-  share_succeeding_day_centavos?: number | null
-  share_10_days_centavos?: number | null
-  share_15_plus_centavos?: number | null
-}
-
-function mapPartnerFixedShare(partner?: PartnerShareRow | null) {
-  if (!partner || partner.share_first_day_centavos == null) return undefined
-  const first = partner.share_first_day_centavos
-  return {
-    rateFirstDay: centavosToPeso(first),
-    rateSucceeding: centavosToPeso(partner.share_succeeding_day_centavos ?? first),
-    rate10Days: centavosToPeso(partner.share_10_days_centavos ?? first),
-    rate15Plus: centavosToPeso(partner.share_15_plus_centavos ?? first),
-  }
-}
-
 export function mapProfile(row: ProfileRow): User {
   const partner = Array.isArray(row.partner_profiles)
     ? row.partner_profiles[0]
@@ -222,7 +204,6 @@ export function mapProfile(row: ProfileRow): User {
           contactPerson: partner.contact_person ?? '',
           agreementSignedAt: partner.agreement_signed_at ?? undefined,
           rentalPackage: mapPartnerRentalPackage(partner),
-          fixedShare: mapPartnerFixedShare(partner),
         }
       : undefined,
     licenseNumber: row.license_number ?? undefined,

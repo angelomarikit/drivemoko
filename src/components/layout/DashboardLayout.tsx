@@ -1,7 +1,7 @@
 import * as Dropdown from '@radix-ui/react-dropdown-menu'
 import { Bell, ChevronDown, LogOut, Menu, Search, X } from 'lucide-react'
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
-import { NavLink, Outlet, useNavigate } from 'react-router-dom'
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { BrandLockup } from '@/components/layout/PublicLayout'
 import { DEMO_ACCOUNTS } from '@/constants/content'
 import { isMockProvider } from '@/lib/config'
@@ -33,8 +33,21 @@ export function DashboardLayout({
   const { data } = useSnapshot()
   const actions = useDemoActions()
   const navigate = useNavigate()
+  const location = useLocation()
   const [open, setOpen] = useState(false)
   const [expanded, setExpanded] = useState<string | null>(null)
+  useEffect(() => {
+    for (const link of links) {
+      if (!link.children?.length) continue
+      const onChild = link.children.some(
+        (child) => location.pathname === child.to || location.pathname.startsWith(`${child.to}/`),
+      )
+      if (onChild) {
+        setExpanded(link.to)
+        break
+      }
+    }
+  }, [location.pathname, links])
   const [query, setQuery] = useState('')
   const [now, setNow] = useState(() => new Date())
   useEffect(() => {
@@ -93,7 +106,17 @@ export function DashboardLayout({
             {link.children && expanded === link.to ? (
               <div className="ml-9 mt-1 space-y-1">
                 {link.children.map((child) => (
-                  <NavLink key={child.to} to={child.to} onClick={() => setOpen(false)} className="block rounded-lg px-2 py-1.5 text-xs font-semibold text-white/70 hover:text-white">
+                  <NavLink
+                    key={child.to}
+                    to={child.to}
+                    onClick={() => setOpen(false)}
+                    className={({ isActive }) =>
+                      cn(
+                        'block rounded-lg px-2 py-1.5 text-xs font-semibold text-white/70 hover:text-white',
+                        isActive && 'bg-white/10 text-white',
+                      )
+                    }
+                  >
                     {child.label}
                   </NavLink>
                 ))}

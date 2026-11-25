@@ -1,4 +1,4 @@
-import { Banknote, CarFront, CalendarCheck, Coins, Users, Wallet } from 'lucide-react'
+import { Banknote, CarFront, CalendarCheck, Coins, ExternalLink, UserPlus, Users, Wallet } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
@@ -25,6 +25,7 @@ import {
   weeklyPartnerShareSeries,
 } from '@/utils/partnerLedger'
 import { formatPeso } from '@/utils/money'
+import { PARTNER_COMMISSION_PERCENT } from '@/utils/partnerShare'
 
 function PartnerKpi({
   label,
@@ -56,7 +57,6 @@ export function PartnersBoard() {
   const [search, setSearch] = useState('')
   const [selected, setSelected] = useState<User | null>(null)
   const [applicationId, setApplicationId] = useState<string | null>(null)
-  const [appsOpen, setAppsOpen] = useState(false)
   const [payOpen, setPayOpen] = useState(params.get('disburse') === '1')
   const [payPartnerId, setPayPartnerId] = useState<string | undefined>()
 
@@ -85,7 +85,15 @@ export function PartnersBoard() {
   const payableChart = useMemo(() => (data ? payableByPartner(data, disbursements, earnings) : []), [data, disbursements, earnings])
 
   const application = data?.applications.find((item) => item.id === applicationId)
-  const pendingApps = data?.applications.filter((item) => item.status === 'pending').length ?? 0
+  const approvalQueue = useMemo(
+    () =>
+      (data?.applications ?? []).filter((item) => item.status === 'pending' || item.status === 'needs_info'),
+    [data?.applications],
+  )
+  const recentApplications = useMemo(
+    () => [...(data?.applications ?? [])].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 20),
+    [data?.applications],
+  )
 
   if (!data) return null
 
@@ -119,31 +127,96 @@ export function PartnersBoard() {
         </div>
       </Panel>
 
-      {pendingApps > 0 ? (
-        <Panel>
-          <button type="button" className="flex w-full items-center justify-between text-left" onClick={() => setAppsOpen((value) => !value)}>
-            <span className="font-bold">Pending applications ({pendingApps})</span>
-            <span className="text-xs text-info">{appsOpen ? 'Hide' : 'Show'}</span>
-          </button>
-          {appsOpen ? (
-            <div className="mt-3 space-y-2">
-              {data.applications
-                .filter((item) => item.status === 'pending')
-                .map((item) => (
-                  <button
-                    key={item.id}
-                    type="button"
-                    className="flex w-full items-center justify-between rounded-xl border px-3 py-2 text-left text-sm"
-                    onClick={() => setApplicationId(item.id)}
-                  >
-                    <span>{item.fullName} · {item.vehicleDetails}</span>
-                    <StatusBadge value={item.status} />
-                  </button>
+      <Panel>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="text-lg font-bold">Link registration &amp; applications</h2>
+            <p className="mt-1 max-w-2xl text-sm text-muted">
+              Applicants submit the form on the public site. Review here, approve when ready, then create their partner login under Register partner account.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Link to="/admin/partners/register">
+              <Button type="button">
+                <UserPlus className="h-4 w-4" />
+                Register partner account
+              </Button>
+            </Link>
+            <Button type="button" variant="outline" asChild>
+              <a href="/become-a-partner" target="_blank" rel="noopener noreferrer">
+                <ExternalLink className="h-4 w-4" />
+                Public apply page
+              </a>
+            </Button>
+          </div>
+        </div>
+
+        <h3 className="mt-5 text-sm font-bold text-navy">
+          Awaiting approval ({approvalQueue.length})
+        </h3>
+        {approvalQueue.length === 0 ? (
+          <p className="mt-2 text-sm text-muted">No applications waiting for review.</p>
+        ) : (
+          <div className="mt-3 overflow-x-auto">
+            <table className="w-full min-w-[720px] text-left text-sm">
+              <thead className="text-xs text-muted">
+                <tr>
+                  <th>Submitted</th>
+                  <th>Applicant</th>
+                  <th>Contact</th>
+                  <th>Vehicles</th>
+                  <th>Status</th>
+                  <th />
+                </tr>
+              </thead>
+              <tbody>
+                {approvalQueue.map((item) => (
+                  <tr key={item.id} className="border-t">
+                    <td className="py-2 text-muted">{formatPretty(item.createdAt.slice(0, 10))}</td>
+                    <td className="py-2 font-semibold">{item.fullName}</td>
+                    <td className="py-2">
+                      <span className="block">{item.email}</span>
+                      <span className="text-xs text-muted">{item.phone}</span>
+                    </td>
+                    <td className="py-2 max-w-[200px] truncate" title={item.vehicleDetails}>
+                      {item.vehicleCount} · {item.vehicleDetails}
+                    </td>
+                    <td className="py-2">
+                      <StatusBadge value={item.status} />
+                    </td>
+                    <td className="py-2 text-right">
+                      <Button type="button" size="sm" variant="outline" onClick={() => setApplicationId(item.id)}>
+                        Review
+                      </Button>
+                    </td>
+                  </tr>
                 ))}
-            </div>
-          ) : null}
-        </Panel>
-      ) : null}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        <h3 className="mt-6 text-sm font-bold text-muted">Recent applications</h3>
+        {recentApplications.length === 0 ? (
+          <p className="mt-2 text-sm text-muted">No applications yet.</p>
+        ) : (
+          <ul className="mt-2 space-y-1 text-sm">
+            {recentApplications.map((item) => (
+              <li key={item.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-line/60 px-3 py-2">
+                <span>
+                  {item.fullName} · {formatPretty(item.createdAt.slice(0, 10))}
+                </span>
+                <span className="flex items-center gap-2">
+                  <StatusBadge value={item.status} />
+                  <button type="button" className="text-xs font-bold text-info" onClick={() => setApplicationId(item.id)}>
+                    Open
+                  </button>
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Panel>
 
       {stats ? (
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
@@ -159,7 +232,7 @@ export function PartnersBoard() {
       <div className="grid gap-4 lg:grid-cols-2">
         <Panel className="h-72">
           <h2 className="font-bold">Partner share earned (weekly)</h2>
-          <p className="text-xs text-muted">Last 8 weeks · fixed share tiers</p>
+          <p className="text-xs text-muted">Last 8 weeks · {PARTNER_COMMISSION_PERCENT}% commission on booking totals</p>
           <div className="h-[85%]">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={weekly}>
@@ -261,7 +334,9 @@ export function PartnersBoard() {
         <h2 className="mb-3 text-lg font-bold">Rental activity</h2>
         <p className="mb-3 text-xs text-muted">Confirmed, ongoing, and completed rentals on partner vehicles</p>
         {lines.length === 0 ? (
-          <p className="py-6 text-center text-sm text-muted">No partner rentals yet. Bookings on partner cars will accrue fixed share here.</p>
+          <p className="py-6 text-center text-sm text-muted">
+            No partner rentals yet. Bookings on partner cars will accrue {PARTNER_COMMISSION_PERCENT}% commission here.
+          </p>
         ) : (
           <div className="max-h-80 overflow-auto">
             <table className="w-full min-w-[820px] text-left text-sm">
@@ -271,7 +346,7 @@ export function PartnersBoard() {
                   <th>Partner</th>
                   <th>Vehicle</th>
                   <th>Dates</th>
-                  <th>Partner share</th>
+                  <th>Partner commission ({PARTNER_COMMISSION_PERCENT}%)</th>
                   <th>Payout</th>
                 </tr>
               </thead>
@@ -381,6 +456,10 @@ function ApplicationModal({
   onClose: () => void
   actions: ReturnType<typeof useDemoActions>
 }) {
+  const registerHref = application
+    ? `/admin/partners/register?email=${encodeURIComponent(application.email)}&name=${encodeURIComponent(application.fullName)}&phone=${encodeURIComponent(application.phone)}&address=${encodeURIComponent(application.address)}&business=${encodeURIComponent(application.fullName)}&units=${application.vehicleCount}&summary=${encodeURIComponent(application.vehicleDetails)}`
+    : '/admin/partners/register'
+
   return (
     <Modal open={!!application} onClose={onClose} title="Partner application">
       {application ? (
@@ -389,7 +468,15 @@ function ApplicationModal({
           <p>{application.address}</p>
           <p>{application.vehicleDetails}</p>
           <p>{application.ownershipType} · {application.vehicleCount} vehicle(s)</p>
-          <p>{application.notes}</p>
+          {application.notes ? <p className="whitespace-pre-wrap text-muted">{application.notes}</p> : null}
+          {application.reviewNote ? <p className="rounded-lg bg-canvas px-2 py-1 text-xs">Note: {application.reviewNote}</p> : null}
+          <p className="rounded-xl bg-sky-50 px-3 py-2 text-xs text-sky-900">
+            After approval, create the partner login on{' '}
+            <Link to={registerHref} className="font-bold text-info" onClick={onClose}>
+              Register partner account
+            </Link>{' '}
+            (form prefilled from this application).
+          </p>
           <div className="flex flex-wrap gap-2">
             <Button onClick={() => actions.reviewApplication(application.id, 'approved').then(() => onClose())}>Approve</Button>
             <Button variant="danger" onClick={() => actions.reviewApplication(application.id, 'rejected').then(() => onClose())}>

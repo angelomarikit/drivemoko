@@ -58,7 +58,7 @@ export const FAQS = [
   },
   {
     q: 'How do partners earn?',
-    a: 'Each partner has a configurable share rate. Earnings on partner vehicles use that rate. The sample partner rate is stored on the partner record, not fixed in the screens.',
+    a: 'Partners (Links) earn 70% of each booking total. Drive Moko keeps 30% as the company share on completed partner-vehicle rentals.',
   },
 ]
 

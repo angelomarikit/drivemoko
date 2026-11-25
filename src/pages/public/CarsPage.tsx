@@ -11,6 +11,7 @@ import { useDemoActions, useSession, useSnapshot } from '@/hooks/useDemo'
 import type { FuelType, Transmission, Vehicle, VehicleCategory } from '@/types'
 import { isPubliclyBookable } from '@/utils/bookingRules'
 import { formatPeso } from '@/utils/money'
+import { formatRentalPriceRange, rentalPackageRateBounds, resolveRentalPackage } from '@/utils/rentalPackage'
 
 const categories: Array<VehicleCategory | 'MPV/Van'> = ['SUV', 'Sedan', 'MPV/Van', 'Pickup', 'Others']
 
@@ -65,14 +66,28 @@ export function CarsPage() {
         (applied.transmissions.length === 0 || applied.transmissions.includes(vehicle.transmission)) &&
         (applied.fuels.length === 0 || applied.fuels.includes(vehicle.fuel)) &&
         (!applied.onlyAvailable || isPubliclyBookable(vehicle)) &&
-        vehicle.pricePerDay >= applied.priceMin &&
-        vehicle.pricePerDay <= applied.priceMax &&
+        (() => {
+          const bounds = rentalPackageRateBounds(resolveRentalPackage(vehicle, data!.settings))
+          return bounds.max >= applied.priceMin && bounds.min <= applied.priceMax
+        })() &&
         text.includes(query.toLowerCase())
       )
     })
     const sorted = [...filtered]
-    if (sort === 'price-asc') sorted.sort((a, b) => a.pricePerDay - b.pricePerDay)
-    if (sort === 'price-desc') sorted.sort((a, b) => b.pricePerDay - a.pricePerDay)
+    if (sort === 'price-asc' && data) {
+      sorted.sort(
+        (a, b) =>
+          rentalPackageRateBounds(resolveRentalPackage(a, data.settings)).min -
+          rentalPackageRateBounds(resolveRentalPackage(b, data.settings)).min,
+      )
+    }
+    if (sort === 'price-desc' && data) {
+      sorted.sort(
+        (a, b) =>
+          rentalPackageRateBounds(resolveRentalPackage(b, data.settings)).max -
+          rentalPackageRateBounds(resolveRentalPackage(a, data.settings)).max,
+      )
+    }
     if (sort === 'name') sorted.sort((a, b) => a.name.localeCompare(b.name))
     if (sort === 'seats') sorted.sort((a, b) => b.seats - a.seats)
     return sorted
@@ -202,7 +217,10 @@ export function CarsPage() {
                     <div className="p-4">
                       <h2 className="font-bold">{vehicle.name}</h2>
                       <p className="mt-1 text-xs text-muted">{vehicle.seats} Seater · {vehicle.transmission} · {vehicle.fuel}</p>
-                      <p className="mt-2 text-lg font-extrabold text-[#f59e0b]">{formatPeso(vehicle.pricePerDay)} <span className="text-xs font-semibold text-muted">/ day</span></p>
+                      <p className="mt-2 text-lg font-extrabold text-[#f59e0b]">
+                        {data ? formatRentalPriceRange(resolveRentalPackage(vehicle, data.settings), formatPeso) : formatPeso(vehicle.pricePerDay)}{' '}
+                        <span className="text-xs font-semibold text-muted">/ day</span>
+                      </p>
                       <div className="mt-3 grid grid-cols-2 gap-2">
                         <Button disabled={!bookable} onClick={() => navigate(`/book/${vehicle.id}${suffix}`)}>Book Now</Button>
                         <Button variant="outline" asChild><Link to={`/cars/${vehicle.id}${suffix}`}>View Details</Link></Button>

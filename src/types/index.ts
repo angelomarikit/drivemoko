@@ -23,8 +23,6 @@ export interface PartnerProfileDetails {
   agreementSignedAt?: string
   /** Admin-set fleet rental package; shown on partner dashboard and applied to their vehicles */
   rentalPackage?: RentalPackage
-  /** Fixed partner earnings per rental day (tiers); not % of booking total */
-  fixedShare?: RentalPackage
 }
 
 export interface PartnerAdminInput {
@@ -32,7 +30,6 @@ export interface PartnerAdminInput {
   notes?: string
   /** Customer list prices — edit per vehicle or Admin → Rental packages, not on partner profile */
   rentalPackage?: RentalPackage
-  fixedShare: RentalPackage
 }
 
 export interface User {
@@ -239,9 +236,7 @@ export interface DriverPackageSettings {
 export interface Settings {
   holdPendingBookings: boolean
   companyCommissionRate: number
-  /** @deprecated Legacy % fallback; use defaultPartnerFixedShare */
   defaultPartnerShare: number
-  defaultPartnerFixedShare: RentalPackage
   ownersCanBlockAvailability: boolean
   smsSenderName: string
   locations: string[]

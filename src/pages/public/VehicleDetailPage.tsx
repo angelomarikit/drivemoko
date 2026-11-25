@@ -23,7 +23,7 @@ import { SecurityDepositSummary } from '@/components/rentals/SecurityDepositSumm
 import { buildPickupLocation, type FulfillmentMode } from '@/constants/pickup'
 import { type DriverServiceZone } from '@/utils/driverPackage'
 import { emptyAddons, quotePackage } from '@/utils/pricing'
-import { resolveRentalPackage } from '@/utils/rentalPackage'
+import { formatRentalPriceRange, resolveRentalPackage } from '@/utils/rentalPackage'
 import { dayAvailability, vehicleDayMap } from '@/utils/vehicleAvailability'
 import { toast } from 'sonner'
 import { findVehicleByParam, isUuid, resolveVehicleForBooking } from '@/utils/vehicleParam'
@@ -154,7 +154,12 @@ export function VehicleDetailPage() {
                 <button type="button" className="grid h-9 w-9 place-items-center rounded-full border" onClick={() => actions.favorite(vehicle.id)} aria-label="Favorite"><Heart className={`h-4 w-4 ${loved ? 'fill-rose-500 text-rose-500' : ''}`} /></button>
               </div>
             </div>
-            <p className="mt-3 text-2xl font-extrabold text-[#f59e0b]">{formatPeso(rentalRates?.rateFirstDay ?? vehicle.pricePerDay)} <span className="text-sm font-semibold text-muted">/ 1st day</span></p>
+            {rentalRates ? (
+              <p className="mt-3 text-2xl font-extrabold text-[#f59e0b]">
+                {formatRentalPriceRange(rentalRates, formatPeso)}{' '}
+                <span className="text-sm font-semibold text-muted">/ day</span>
+              </p>
+            ) : null}
             {rentalRates ? (
               <div className="mt-3 space-y-3">
                 <RentalPackageRates package={rentalRates} compact />
@@ -223,7 +228,10 @@ export function VehicleDetailPage() {
           </Tabs.List>
           <Tabs.Content value="description" className="py-4 text-sm leading-6">
             <h3 className="font-bold">About This Vehicle</h3>
-            <p className="mt-2 text-muted">{vehicle.description} From {formatPeso(vehicle.pricePerDay)} per day. Plate {vehicle.plateNumber}.</p>
+            <p className="mt-2 text-muted">
+              {vehicle.description}
+              {rentalRates ? ` Rates from ${formatRentalPriceRange(rentalRates, formatPeso)} per day.` : ''} Plate {vehicle.plateNumber}.
+            </p>
           </Tabs.Content>
           <Tabs.Content value="terms" className="space-y-2 py-4 text-sm text-muted">{RENTAL_TERMS.map((term) => <p key={term}>{term}</p>)}</Tabs.Content>
           <Tabs.Content value="requirements" className="grid gap-3 py-4 md:grid-cols-2">{REQUIREMENTS.map((item) => <div key={item.title} className="rounded-2xl bg-canvas p-4"><p className="font-bold">{item.title}</p><p className="mt-1 text-sm text-muted">{item.body}</p></div>)}</Tabs.Content>

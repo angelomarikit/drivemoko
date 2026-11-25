@@ -19,23 +19,35 @@ async function syncCustomerProfile(customerId: string, customer: CustomerDraft) 
     .eq('id', customerId)
 }
 
+async function activateCustomerSession(customerId: string, customer?: CustomerDraft) {
+  if (customer) await syncCustomerProfile(customerId, customer)
+  const profile = await fetchProfile(customerId)
+  if (profile) useAuthSessionStore.getState().setUser(profile)
+  return customerId
+}
+
 /** Ensures a customer profile id for booking insert (signed-in customer or guest checkout sign-up). */
 export async function resolveBookingCustomerId(
   customerId: string | undefined,
   customer: CustomerDraft | undefined,
 ): Promise<string> {
-  if (customerId) return customerId
-
   const supabase = getSupabaseClient()
+  await supabase.auth.refreshSession()
   const { data: authData } = await supabase.auth.getSession()
   const authUser = authData.session?.user
+
+  if (customerId && authUser?.id === customerId) {
+    return activateCustomerSession(customerId, customer)
+  }
+
+  if (customerId && !authUser) {
+    customerId = undefined
+  }
 
   if (authUser) {
     const profile = await fetchProfile(authUser.id)
     if (profile?.role === 'customer') {
-      if (customer) await syncCustomerProfile(profile.id, customer)
-      useAuthSessionStore.getState().setUser(profile)
-      return profile.id
+      return activateCustomerSession(profile.id, customer)
     }
     if (profile) {
       throw new Error('You are signed in as staff. Sign out to book as a guest, or use a customer account.')
@@ -48,6 +60,7 @@ export async function resolveBookingCustomerId(
 
   const email = customer.email.trim().toLowerCase()
   const password = generateSecurePassword()
+
   const { data, error } = await supabase.auth.signUp({
     email,
     password,
@@ -63,20 +76,22 @@ export async function resolveBookingCustomerId(
   if (error) {
     if (/already registered|already exists|user already/i.test(error.message)) {
       throw new Error(
-        'This email already has an account. Sign in from the top menu, then return here and confirm your booking.',
+        'This email already has an account. Sign in from the top menu with that email, then confirm your booking again.',
       )
     }
     throw new Error(error.message)
   }
   if (!data.user) throw new Error('Could not create your customer account.')
+
   if (!data.session) {
-    throw new Error(
-      'Confirm your email first (check your inbox), then sign in and submit the booking again.',
-    )
+    const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({ email, password })
+    if (signInError || !signInData.session) {
+      throw new Error(
+        'We saved your details. Check your email to confirm your account, then sign in and confirm the booking again.',
+      )
+    }
   }
 
   await syncCustomerProfile(data.user.id, customer)
-  const profile = await fetchProfile(data.user.id)
-  if (profile) useAuthSessionStore.getState().setUser(profile)
-  return data.user.id
+  return activateCustomerSession(data.user.id, customer)
 }

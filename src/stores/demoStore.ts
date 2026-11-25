@@ -567,7 +567,6 @@ export const useDemoStore = create<DemoState>()(
                   contractReference: '',
                   contractNotes: '',
                   contactPerson: input.name,
-                  fixedShare: { ...state.settings.defaultPartnerFixedShare },
                 }
               : undefined,
           createdAt: new Date().toISOString(),
@@ -603,7 +602,6 @@ export const useDemoStore = create<DemoState>()(
           contactPerson: current.partnerProfile?.contactPerson ?? current.name,
           agreementSignedAt: current.partnerProfile?.agreementSignedAt,
           rentalPackage: input.rentalPackage ?? current.partnerProfile?.rentalPackage,
-          fixedShare: input.fixedShare,
         }
         const users = state.users.map((user) =>
           user.id === partnerId
@@ -677,7 +675,7 @@ export const useDemoStore = create<DemoState>()(
         if (!application) throw new DemoError('Application not found.')
         let users = state.users
         if (decision === 'approved') {
-          const rate = shareRate ?? state.settings.defaultPartnerShare
+          const rate = state.settings.defaultPartnerShare
           const existing = users.find((user) => user.email.toLowerCase() === application.email.toLowerCase())
           if (existing && existing.role !== 'partner') throw new DemoError('That email already belongs to another demo role.')
           if (existing) {
@@ -793,10 +791,6 @@ export const useDemoStore = create<DemoState>()(
             defaultRentalPackage: {
               ...DEFAULT_SETTINGS.defaultRentalPackage,
               ...data.settings?.defaultRentalPackage,
-            },
-            defaultPartnerFixedShare: {
-              ...DEFAULT_SETTINGS.defaultPartnerFixedShare,
-              ...data.settings?.defaultPartnerFixedShare,
             },
             defaultDriverPackage: {
               ...DEFAULT_SETTINGS.defaultDriverPackage,

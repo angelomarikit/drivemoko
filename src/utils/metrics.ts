@@ -1,6 +1,6 @@
 import type { Booking, DemoData, Payment, Role, User, Vehicle } from '@/types'
 import { addDays, diffDays, formatMonthDay, manilaYmd } from '@/utils/dates'
-import { fixedShareTotalForBooking } from '@/utils/partnerShare'
+import { partnerCommissionForBooking } from '@/utils/partnerShare'
 import { percentChange } from '@/utils/money'
 
 const EARNING_STATUSES = new Set(['confirmed', 'ongoing', 'completed'])
@@ -17,8 +17,7 @@ export function shareAmount(
   if (viewer.role === 'admin' || viewer.role === 'customer') return gross
   if (viewer.role === 'partner' || viewer.role === 'owner') {
     if (vehicle.partnerId !== viewer.id) return 0
-    const partner = users.find((user) => user.id === viewer.id)
-    return fixedShareTotalForBooking(booking, partner, settings)
+    return partnerCommissionForBooking(booking)
   }
   return 0
 }

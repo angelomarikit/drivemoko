@@ -11,6 +11,7 @@ import type { FulfillmentMode } from '@/constants/pickup'
 import { BRAND, FAQS, SERVICES, TESTIMONIALS } from '@/constants/content'
 import { useSnapshot } from '@/hooks/useDemo'
 import { formatPeso } from '@/utils/money'
+import { formatRentalPriceRange, resolveRentalPackage } from '@/utils/rentalPackage'
 
 function HeroMessage({ compact = false }: { compact?: boolean }) {
   return (
@@ -121,17 +122,22 @@ export function HomePage() {
             <Link to="/cars" className="text-sm font-bold text-navy">View all</Link>
           </div>
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            {featured.map((vehicle) => (
+            {featured.map((vehicle) => {
+              const pkg = data ? resolveRentalPackage(vehicle, data.settings) : null
+              return (
               <article key={vehicle.id} className="overflow-hidden rounded-2xl bg-white shadow-sm">
                 <VehicleImage src={vehicle.images[0]} alt={vehicle.name} className="h-40 w-full" />
                 <div className="p-4">
                   <h3 className="font-bold">{vehicle.name}</h3>
                   <p className="mt-1 text-sm text-muted">{vehicle.seats} Seater · {vehicle.transmission}</p>
-                  <p className="mt-2 font-extrabold text-gold-2">{formatPeso(vehicle.pricePerDay)} <span className="text-xs font-semibold text-muted">/ day</span></p>
+                  <p className="mt-2 font-extrabold text-gold-2">
+                    {pkg ? formatRentalPriceRange(pkg, formatPeso) : formatPeso(vehicle.pricePerDay)}{' '}
+                    <span className="text-xs font-semibold text-muted">/ day</span>
+                  </p>
                   <Button className="mt-3 w-full" onClick={() => navigate(`/cars/${vehicle.id}`)}>View Details</Button>
                 </div>
               </article>
-            ))}
+            )})}
           </div>
         </div>
       </section>

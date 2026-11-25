@@ -1,18 +1,17 @@
 import { useMemo, useState } from 'react'
 import { RecordDisbursementModal } from '@/components/partners/RecordDisbursementModal'
-import { RentalPackageEditor } from '@/components/admin/RentalPackageEditor'
 import { StatusBadge } from '@/components/common/StatusBadge'
 import { Button } from '@/components/ui/Button'
 import { FieldLabel, TextArea, TextInput } from '@/components/ui/Fields'
 import { useFinancial } from '@/hooks/useFinancial'
 import { useDemoActions, useSnapshot } from '@/hooks/useDemo'
-import type { PartnerAdminInput, RentalPackage, User } from '@/types'
+import type { PartnerAdminInput, User } from '@/types'
 import { formatPretty } from '@/utils/dates'
 import {
   buildPartnerRentalLines,
   partnerSliceStats,
 } from '@/utils/partnerLedger'
-import { DEFAULT_PARTNER_FIXED_SHARE, resolvePartnerFixedShare } from '@/utils/partnerShare'
+import { PARTNER_COMMISSION_PERCENT } from '@/utils/partnerShare'
 import { resolveRentalPackage } from '@/utils/rentalPackage'
 import { formatPeso } from '@/utils/money'
 
@@ -29,9 +28,6 @@ export function PersonProfile({ person, onClose }: { person: User; onClose: () =
       : partner?.contactPerson || partner?.businessName || person.name
   const [displayName, setDisplayName] = useState(defaultDisplayName)
   const [notes, setNotes] = useState(person.notes ?? '')
-  const [fixedShare, setFixedShare] = useState<RentalPackage>(() =>
-    data ? resolvePartnerFixedShare(person, data.settings) : { ...DEFAULT_PARTNER_FIXED_SHARE },
-  )
   const [saving, setSaving] = useState(false)
   const [payOpen, setPayOpen] = useState(false)
 
@@ -61,7 +57,6 @@ export function PersonProfile({ person, onClose }: { person: User; onClose: () =
       const input: PartnerAdminInput = {
         name: displayName.trim() || undefined,
         notes,
-        fixedShare,
       }
       await actions.savePartnerAdminProfile(person.id, input)
       onClose()
@@ -82,7 +77,7 @@ export function PersonProfile({ person, onClose }: { person: User; onClose: () =
             {[
               ['Fleet', String(slice.fleetCount)],
               ['Rentals', String(slice.rentalCount)],
-              ['Share earned', formatPeso(slice.shareEarned)],
+              ['Commission earned', formatPeso(slice.shareEarned)],
               ['Outstanding', formatPeso(slice.outstandingPayable)],
               ['Disbursed', formatPeso(slice.totalDisbursed)],
             ].map(([label, value]) => (
@@ -108,12 +103,11 @@ export function PersonProfile({ person, onClose }: { person: User; onClose: () =
           <FieldLabel>Display name</FieldLabel>
           <TextInput value={displayName} onChange={(event) => setDisplayName(event.target.value)} placeholder="Partner name on dashboard" />
         </label>
-        <div>
-          <p className="mb-2 font-extrabold text-ink">Fixed partner share (per day)</p>
-          <p className="mb-3 text-xs text-muted">
-            What the partner earns per rental day at each tier. Shown on their dashboard and used for statements.
+        <div className="rounded-xl border border-line bg-canvas px-3 py-2 text-xs">
+          <p className="font-bold text-sm text-navy">Partner commission</p>
+          <p className="mt-1">
+            <span className="font-extrabold text-success">{PARTNER_COMMISSION_PERCENT}%</span> of each booking total (fixed for all Links).
           </p>
-          <RentalPackageEditor value={fixedShare} onChange={setFixedShare} showPreview={false} />
         </div>
         <div>
           <p className="mb-2 font-bold">Rental ledger</p>

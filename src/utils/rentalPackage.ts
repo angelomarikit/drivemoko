@@ -39,3 +39,15 @@ export function packageFromFlatDaily(rate: number): RentalPackage {
     rate15Plus: rate,
   }
 }
+
+export function rentalPackageRateBounds(pkg: RentalPackage): { min: number; max: number } {
+  const rates = [pkg.rateFirstDay, pkg.rateSucceeding, pkg.rate10Days, pkg.rate15Plus]
+  return { min: Math.min(...rates), max: Math.max(...rates) }
+}
+
+/** Smallest to biggest tier rate, e.g. ₱2,999 - ₱4,999 */
+export function formatRentalPriceRange(pkg: RentalPackage, format: (amount: number) => string): string {
+  const { min, max } = rentalPackageRateBounds(pkg)
+  if (min === max) return format(min)
+  return `${format(min)} - ${format(max)}`
+}

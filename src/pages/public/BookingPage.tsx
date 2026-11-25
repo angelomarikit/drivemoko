@@ -1,5 +1,6 @@
 import { zodResolver } from '@hookform/resolvers/zod'
-import { ArrowLeft, ArrowRight, CalendarDays, CarFront, Check, UserRound } from 'lucide-react'
+import * as Popover from '@radix-ui/react-popover'
+import { ArrowLeft, ArrowRight, CalendarDays, CarFront, Check, Info, UserRound } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
@@ -296,6 +297,7 @@ export function BookingPage() {
                   <RenterDocumentUpload
                     className="md:col-span-2"
                     label="Proof of billing or barangay clearance"
+                    labelInfo="The bill or clearance should be in the renter's name. If it is in another person's name, also upload a copy of that person's valid ID."
                     required
                     picked={renterDocs.proofOfBilling}
                     onPick={(file) => pickRenterDoc('proofOfBilling', file)}
@@ -430,12 +432,14 @@ export function BookingPage() {
 
 function RenterDocumentUpload({
   label,
+  labelInfo,
   required,
   picked,
   onPick,
   className,
 }: {
   label: string
+  labelInfo?: string
   required?: boolean
   picked?: PickedRenterDoc
   onPick: (file: File) => void
@@ -443,7 +447,33 @@ function RenterDocumentUpload({
 }) {
   return (
     <div className={cn('rounded-2xl border border-slate-100 bg-slate-50/60 p-3', className)}>
-      <FieldLabel required={required}>{label}</FieldLabel>
+      <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
+        <span className="text-sm font-semibold text-ink">
+          {label}
+          {required ? <span className="text-danger"> *</span> : null}
+        </span>
+        {labelInfo ? (
+          <Popover.Root>
+            <Popover.Trigger
+              type="button"
+              className="grid h-6 w-6 shrink-0 place-items-center rounded-full border border-line bg-white text-muted hover:border-navy/30 hover:text-navy"
+              aria-label={`About ${label}`}
+            >
+              <Info className="h-3.5 w-3.5" aria-hidden />
+            </Popover.Trigger>
+            <Popover.Portal>
+              <Popover.Content
+                side="top"
+                align="start"
+                sideOffset={6}
+                className="z-[70] max-w-xs rounded-xl border border-line bg-white p-3 text-xs leading-relaxed text-muted shadow-lg"
+              >
+                {labelInfo}
+              </Popover.Content>
+            </Popover.Portal>
+          </Popover.Root>
+        ) : null}
+      </div>
       <div className="mt-2 flex flex-wrap items-center gap-2">
         <FileUploadButton
           label={picked ? 'Change file' : 'Upload file'}

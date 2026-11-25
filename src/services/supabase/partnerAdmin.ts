@@ -1,4 +1,5 @@
 import { getSupabaseClient } from '@/lib/supabase/client'
+import { PARTNER_COMMISSION_PERCENT } from '@/utils/partnerShare'
 import type { PartnerAdminInput, RentalPackage } from '@/types'
 
 function packageToCentavos(pkg: RentalPackage) {
@@ -14,7 +15,7 @@ async function assertAdmin(actorId: string) {
   const supabase = getSupabaseClient()
   const { data, error } = await supabase.from('profiles').select('role').eq('id', actorId).maybeSingle()
   if (error) throw new Error(error.message)
-  if (!data || data.role !== 'admin') throw new Error('Only an administrator can edit partner rates.')
+  if (!data || data.role !== 'admin') throw new Error('Only an administrator can edit partner profiles.')
 }
 
 export async function updatePartnerAdminProfile(partnerId: string, input: PartnerAdminInput, actorId: string) {
@@ -30,15 +31,12 @@ export async function updatePartnerAdminProfile(partnerId: string, input: Partne
     if (error) throw new Error(error.message)
   }
 
-  const partnerPatch: Record<string, unknown> = {}
+  const partnerPatch: Record<string, unknown> = {
+    share_rate_bps: PARTNER_COMMISSION_PERCENT * 100,
+  }
   if (input.rentalPackage) {
     Object.assign(partnerPatch, packageToCentavos(input.rentalPackage))
   }
-  const fixed = packageToCentavos(input.fixedShare)
-  partnerPatch.share_first_day_centavos = fixed.rate_first_day_centavos
-  partnerPatch.share_succeeding_day_centavos = fixed.rate_succeeding_day_centavos
-  partnerPatch.share_10_days_centavos = fixed.rate_10_days_centavos
-  partnerPatch.share_15_plus_centavos = fixed.rate_15_plus_centavos
 
   const { error: partnerError } = await supabase.from('partner_profiles').update(partnerPatch).eq('profile_id', partnerId)
   if (partnerError) throw new Error(partnerError.message)

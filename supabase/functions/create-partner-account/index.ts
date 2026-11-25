@@ -91,7 +91,7 @@ Deno.serve(async (req) => {
       })
       .eq('id', userId)
 
-    const shareBps = Math.round(Math.min(100, Math.max(0, body.shareRatePercent)) * 100)
+    const shareBps = 7000
     const { error: finalizeError } = await userClient.rpc('admin_finalize_partner_profile', {
       p_profile_id: userId,
       p_share_rate_bps: shareBps,

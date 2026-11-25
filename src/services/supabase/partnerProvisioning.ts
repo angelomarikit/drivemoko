@@ -59,7 +59,7 @@ async function finalizePartnerProfile(
   userId: string,
   input: RegisterPartnerInput,
 ) {
-  const shareBps = Math.round(Math.min(100, Math.max(0, input.shareRatePercent)) * 100)
+  const shareBps = 7000
   const { error } = await supabase.rpc('admin_finalize_partner_profile', {
     p_profile_id: userId,
     p_share_rate_bps: shareBps,

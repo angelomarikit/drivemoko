@@ -56,7 +56,7 @@ import { DriverPackageEditor } from '@/components/admin/DriverPackageEditor'
 import { RentalPackageEditor } from '@/components/admin/RentalPackageEditor'
 import { RentalPackageRates } from '@/components/rentals/RentalPackageRates'
 import { emptyAddons } from '@/utils/pricing'
-import { DEFAULT_PARTNER_FIXED_SHARE, resolvePartnerFixedShare } from '@/utils/partnerShare'
+import { COMPANY_COMMISSION_PERCENT, PARTNER_COMMISSION_PERCENT } from '@/utils/partnerShare'
 import { DEFAULT_RENTAL_PACKAGE, resolveRentalPackage } from '@/utils/rentalPackage'
 import type { PartnerAdminInput, RentalPackage } from '@/types'
 
@@ -1550,8 +1550,6 @@ export function SettingsBoard() {
   const actions = useDemoActions()
   const supabaseMode = import.meta.env.VITE_DATA_PROVIDER === 'supabase'
   const ask = useUiStore((state) => state.askConfirm)
-  const [defaultFixedShare, setDefaultFixedShare] = useState(() => data?.settings.defaultPartnerFixedShare ?? DEFAULT_PARTNER_FIXED_SHARE)
-  const [commission, setCommission] = useState(String(data?.settings.companyCommissionRate ?? 0))
   if (!data || !session) return null
   return (
     <div className="grid gap-4 lg:grid-cols-2">
@@ -1559,10 +1557,13 @@ export function SettingsBoard() {
         <h1 className="text-xl font-extrabold">Settings</h1>
         <label className="mt-3 flex items-center gap-2 text-sm"><input type="checkbox" checked={data.settings.holdPendingBookings} onChange={(event) => actions.saveSettings({ holdPendingBookings: event.target.checked })} /> Pending bookings hold the calendar</label>
         <label className="mt-3 flex items-center gap-2 text-sm"><input type="checkbox" checked={data.settings.ownersCanBlockAvailability} onChange={(event) => actions.saveSettings({ ownersCanBlockAvailability: event.target.checked })} /> Partners can block unavailable dates</label>
-        <p className="mt-3 text-sm font-bold">Default fixed partner share (new partners)</p>
-        <RentalPackageEditor value={defaultFixedShare} onChange={setDefaultFixedShare} />
-        <label className="mt-3 block text-sm">Company commission on fleet vehicles (no partner) %<TextInput value={commission} onChange={(event) => setCommission(event.target.value)} /></label>
-        <Button className="mt-3" onClick={() => actions.saveSettings({ defaultPartnerFixedShare: defaultFixedShare, companyCommissionRate: Number(commission) })}>Save settings</Button>
+        <div className="mt-4 rounded-2xl border border-line bg-canvas px-3 py-3 text-sm">
+          <p className="font-bold text-ink">Partner commission split</p>
+          <p className="mt-1 text-muted">
+            Links earn <strong className="text-ink">{PARTNER_COMMISSION_PERCENT}%</strong> of each booking total. Company retains{' '}
+            <strong className="text-ink">{COMPANY_COMMISSION_PERCENT}%</strong>. This split is fixed and cannot be changed in the app.
+          </p>
+        </div>
         <p className="mt-4 text-sm text-muted">
           Rental tier pricing is managed on{' '}
           <Link to="/admin/rental-packages" className="font-bold text-info">
@@ -1707,10 +1708,9 @@ export function StatementsBoard() {
         <h1 className="text-xl font-extrabold">Statements</h1>
         <Button onClick={() => downloadCsv('drive-moko-partner-statement.csv', rows)}>Download statement (CSV)</Button>
       </div>
-      <div className="mb-3">
-        <p className="text-sm font-bold text-ink">Your fixed share (per day)</p>
-        <RentalPackageRates package={resolvePartnerFixedShare(session, data.settings)} compact />
-      </div>
+      <p className="mb-3 text-sm text-muted">
+        Your commission is <strong className="text-ink">{PARTNER_COMMISSION_PERCENT}%</strong> of each booking total shown in the rental column.
+      </p>
       {rows.length === 1 ? (
         <p className="py-8 text-center text-sm text-muted">No rental activity to statement yet.</p>
       ) : (

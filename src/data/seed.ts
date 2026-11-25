@@ -311,7 +311,6 @@ function seedSettings() {
     holdPendingBookings: true,
     companyCommissionRate: 0,
     defaultPartnerShare: 70,
-    defaultPartnerFixedShare: { rateFirstDay: 2000, rateSucceeding: 1500, rate10Days: 1300, rate15Plus: 1200 },
     defaultDriverPackage: { insidePerDay: 1000, outsideFirstDay: 3000, outsideSucceeding: 1000 },
     securityDepositAmount: 3000,
     ownersCanBlockAvailability: true,

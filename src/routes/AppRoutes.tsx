@@ -142,13 +142,23 @@ export function AppRoutes() {
 function AdminShell() {
   const { data } = useSnapshot()
   const pending = data?.bookings.filter((booking) => booking.status === 'pending').length ?? 0
+  const pendingPartnerApps =
+    data?.applications.filter((item) => item.status === 'pending' || item.status === 'needs_info').length ?? 0
   const links: DashLink[] = [
     { to: '/admin', label: 'Dashboard', icon: LayoutDashboard, end: true },
     { to: '/admin/bookings', label: 'Bookings', icon: CalendarDays, badge: pending },
     { to: '/admin/vehicles', label: 'Vehicles', icon: CarFront },
     { to: '/admin/rental-packages', label: 'Rental packages', icon: Tags },
     { to: '/admin/calendar', label: 'Calendar', icon: CalendarDays },
-    { to: '/admin/partners', label: 'Links / Partners', icon: Users },
+    {
+      to: '/admin/partners',
+      label: 'Links / Partners',
+      icon: Users,
+      badge: pendingPartnerApps > 0 ? pendingPartnerApps : undefined,
+      children: [
+        { to: '/admin/partners/register', label: 'Register partner account' },
+      ],
+    },
     { to: '/admin/customers', label: 'Customers', icon: Users },
     { to: '/admin/payments', label: 'Payments', icon: WalletCards },
     { to: '/admin/reports', label: 'Reports', icon: BarChart3 },
