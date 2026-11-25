@@ -41,6 +41,8 @@ type PickedRenterDoc = { file: File; preview?: string }
 const customerSchema = z.object({
   name: z.string().min(2, 'Enter the renter name'),
   email: z.string().email('Enter a valid email'),
+  password: z.string().optional(),
+  confirmPassword: z.string().optional(),
   phone: z.string().min(10, 'Enter a contact number'),
   address: z.string().min(4, 'Enter an address'),
   licenseNumber: z.string().optional(),
@@ -93,11 +95,15 @@ export function BookingPage() {
   const [scheduleError, setScheduleError] = useState('')
   const [contractOpen, setContractOpen] = useState(false)
   const [contractDraft, setContractDraft] = useState<RentalContractData | null>(null)
+  const bookingAsGuest = !session || session.role !== 'customer'
+
   const form = useForm<CustomerForm>({
     resolver: zodResolver(customerSchema),
     defaultValues: {
       name: session?.role === 'customer' ? session.name : '',
       email: session?.role === 'customer' ? session.email : '',
+      password: '',
+      confirmPassword: '',
       phone: session?.role === 'customer' ? session.phone : '',
       address: session?.role === 'customer' ? session.address : '',
       licenseNumber: session?.licenseNumber ?? '',
@@ -157,6 +163,17 @@ export function BookingPage() {
   }
 
   const submitInfo = form.handleSubmit((values) => {
+    if (bookingAsGuest) {
+      const password = values.password?.trim() ?? ''
+      if (password.length < 8) {
+        form.setError('password', { message: 'Use at least 8 characters for your password.' })
+        return
+      }
+      if (password !== (values.confirmPassword?.trim() ?? '')) {
+        form.setError('confirmPassword', { message: 'Passwords do not match.' })
+        return
+      }
+    }
     if (!withDriver && !values.licenseNumber?.trim()) {
       form.setError('licenseNumber', { message: 'A license number is required for self-drive' })
       return
@@ -173,13 +190,52 @@ export function BookingPage() {
     setStep(2)
   })
 
+  const [confirming, setConfirming] = useState(false)
+
   const confirm = async () => {
-    if (!contractDraft) return
+    if (!contractDraft || confirming) return
     const values = form.getValues()
+    const missing: string[] = []
+    if (!renterDocs.license) missing.push("driver's license photo")
+    if (!renterDocs.validId) missing.push('valid ID')
+    if (!renterDocs.proofOfBilling) missing.push('proof of billing or barangay clearance')
+    if (missing.length) {
+      setRenterDocError(`Please upload: ${missing.join(', ')}.`)
+      setStep(1)
+      return
+    }
+    const clash = scheduleIssues(
+      {
+        vehicleId: vehicle.id,
+        pickupDate: pickup,
+        returnDate: ret,
+        pickupTime,
+        returnTime,
+        rentalType,
+        customerId: session?.role === 'customer' ? session.id : undefined,
+      },
+      data,
+    )
+    if (clash.length) {
+      setScheduleError(clash[0])
+      setStep(0)
+      return
+    }
+    setConfirming(true)
+    try {
     const booking = await actions.createBooking({
       vehicleId: vehicleId ?? vehicle.id,
       customerId: session?.role === 'customer' ? session.id : undefined,
-      customer: values,
+      customer: {
+        name: values.name,
+        email: values.email,
+        phone: values.phone,
+        address: values.address,
+        licenseNumber: values.licenseNumber,
+        emergencyName: values.emergencyName,
+        emergencyPhone: values.emergencyPhone,
+        password: bookingAsGuest ? values.password?.trim() : undefined,
+      },
       pickupLocation,
       pickupDate: pickup,
       returnDate: ret,
@@ -199,6 +255,9 @@ export function BookingPage() {
     if (booking) {
       setDone(booking)
       setStep(3)
+    }
+    } finally {
+      setConfirming(false)
     }
   }
 
@@ -265,6 +324,24 @@ export function BookingPage() {
                   <h2 className="flex items-center gap-2 text-lg font-bold md:col-span-2"><UserRound className="h-5 w-5" /> Your Information</h2>
                   <label><FieldLabel required>Full Name</FieldLabel><TextInput {...form.register('name')} /></label>
                   <label><FieldLabel required>Email</FieldLabel><TextInput type="email" {...form.register('email')} /></label>
+                  {bookingAsGuest ? (
+                    <>
+                      <label className="md:col-span-2">
+                        <FieldLabel required>Password</FieldLabel>
+                        <TextInput
+                          type="password"
+                          autoComplete="new-password"
+                          placeholder="At least 8 characters"
+                          {...form.register('password')}
+                        />
+                        <p className="mt-1 text-xs text-muted">Use this email and password to sign in and track your bookings later.</p>
+                      </label>
+                      <label className="md:col-span-2">
+                        <FieldLabel required>Confirm password</FieldLabel>
+                        <TextInput type="password" autoComplete="new-password" {...form.register('confirmPassword')} />
+                      </label>
+                    </>
+                  ) : null}
                   <label><FieldLabel required>Contact Number</FieldLabel><TextInput {...form.register('phone')} placeholder="09XX XXX XXXX" /></label>
                   <label>
                     <FieldLabel required>{fulfillmentMode === 'delivery' ? 'Delivery address' : 'Address'}</FieldLabel>
@@ -383,8 +460,12 @@ export function BookingPage() {
                 {step === 0 ? <Button onClick={next}>Continue to Your Information <ArrowRight className="h-4 w-4" /></Button> : null}
                 {step === 1 ? <Button type="submit" form="customer-form">Review & Confirm <ArrowRight className="h-4 w-4" /></Button> : null}
                 {step === 2 ? (
-                  <Button onClick={confirm} disabled={!contractDraft} title={!contractDraft ? 'Sign the rental contract first' : undefined}>
-                    Confirm Booking
+                  <Button
+                    onClick={confirm}
+                    disabled={!contractDraft || confirming}
+                    title={!contractDraft ? 'Sign the rental contract first' : undefined}
+                  >
+                    {confirming ? 'Submitting…' : 'Confirm Booking'}
                   </Button>
                 ) : null}
               </div>

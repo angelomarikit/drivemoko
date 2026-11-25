@@ -116,12 +116,10 @@ export function scheduleIssues(input: ScheduleInput, data: Pick<DemoData, 'vehic
     input.ignoreBookingId,
   )
   if (clash) {
-    if (input.customerId && clash.customerId === input.customerId && clash.status === 'pending') {
-      issues.push(
-        `You already have pending booking ${clash.reference} for these dates. Open My Bookings or submit again to finish that request.`,
-      )
-    } else {
-      issues.push(`Those dates overlap ${clash.reference}.`)
+  const ownPending =
+      input.customerId && clash.customerId === input.customerId && clash.status === 'pending'
+    if (!ownPending) {
+      issues.push(`Those dates are no longer available for this vehicle. Pick different dates and try again.`)
     }
   }
   const maintenance = data.maintenance.find(

@@ -2,6 +2,12 @@ type ErrorContext = 'booking' | 'vehicle' | 'payment' | 'account' | 'general'
 
 const FRIENDLY_ALREADY = [
   'those dates overlap',
+  'those dates are no longer',
+  'you already have pending',
+  'please upload',
+  'choose a password',
+  'at least 8 characters',
+  'this email already',
   'vehicle not found',
   'sign in',
   'could not save',
@@ -63,9 +69,24 @@ export function friendlyErrorMessage(error: unknown, context: ErrorContext = 'ge
     return 'Those dates are no longer available for this vehicle. Pick different dates and try again.'
   }
 
+  if (lower.includes('already registered') || (lower.includes('email') && lower.includes('already'))) {
+    if (context === 'account' || context === 'booking') {
+      return 'This email already has an account. Sign in from the menu, then confirm your booking again.'
+    }
+  }
+
   if (lower.includes('duplicate key') || lower.includes('already exists')) {
     if (context === 'account') {
       return 'This email is already registered. Sign in or use a different email.'
+    }
+    if (context === 'booking') {
+      if (lower.includes('bookings_no_overlap') || lower.includes('exclusion')) {
+        return 'Those dates are no longer available for this vehicle. Pick different dates and try again.'
+      }
+      if (lower.includes('storage') || lower.includes('object') || lower.includes('resource')) {
+        return 'We could not complete your booking right now. Please try again in a moment or message us for help.'
+      }
+      return 'Those dates are no longer available for this vehicle. Pick different dates and try again.'
     }
     return 'This record already exists. Refresh the page and check your list.'
   }

@@ -292,6 +292,8 @@ export interface CustomerDraft {
   licenseNumber?: string
   emergencyName?: string
   emergencyPhone?: string
+  /** Guest checkout only — used to create the customer auth account. */
+  password?: string
 }
 
 export type BookingRenterDocumentFiles = {

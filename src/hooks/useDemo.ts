@@ -87,12 +87,15 @@ export function useDemoActions() {
         sessionRepository.favorite(id, vehicleId)
       })
     },
-    createBooking: (input: Omit<CreateBookingInput, 'actorId'>) =>
-      run(
-        () => repositories.bookings.create({ ...input, actorId: session?.id ?? null }),
+    createBooking: (input: Omit<CreateBookingInput, 'actorId'>) => {
+      const customerId =
+        input.customerId ?? (session?.role === 'customer' ? session.id : undefined)
+      return run(
+        () => repositories.bookings.create({ ...input, customerId, actorId: session?.id ?? null }),
         'Booking request sent',
         'booking',
-      ),
+      )
+    },
     transition: (id: string, status: BookingStatus, note?: string) =>
       run(() => repositories.bookings.transition(id, status, actorId, note), `Booking marked ${status}`),
     updateBooking: (id: string, patch: Parameters<typeof repositories.bookings.update>[1]) =>

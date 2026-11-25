@@ -4,7 +4,7 @@ import { fetchSupabaseSnapshot } from '@/services/supabase/snapshot'
 import { mapBooking, mapVehicle } from '@/services/supabase/mappers'
 import type { Booking, BookingStatus, CreateBookingInput } from '@/types'
 import { enqueueBookingStatusEmails } from '@/services/notifications/outbox'
-import { canTransition, scheduleIssues } from '@/utils/bookingRules'
+import { canTransition, findMatchingPendingBooking, scheduleIssues } from '@/utils/bookingRules'
 import { persistRenterDocuments } from '@/services/bookingDocuments'
 import { persistBookingContract } from '@/services/bookingContract'
 import { quotePackage } from '@/utils/pricing'
@@ -55,6 +55,24 @@ function normalizeTime(value: string | null | undefined) {
   return text.length >= 5 ? text.slice(0, 5) : text
 }
 
+function isStorageAlreadyStored(message: string) {
+  const lower = message.toLowerCase()
+  return (
+    lower.includes('already exists') ||
+    lower.includes('resource already exists') ||
+    (lower.includes('duplicate') && lower.includes('object'))
+  )
+}
+
+function isRenterDocColumnMissing(message: string) {
+  const lower = message.toLowerCase()
+  return (
+    lower.includes('valid_id_storage_path') ||
+    lower.includes('proof_of_billing_storage_path') ||
+    (lower.includes('column') && lower.includes('does not exist'))
+  )
+}
+
 async function findPendingBookingInDatabase(
   supabase: ReturnType<typeof getSupabaseClient>,
   customerId: string,
@@ -85,6 +103,26 @@ async function findPendingBookingInDatabase(
   return mapBooking(exact as Parameters<typeof mapBooking>[0], [])
 }
 
+async function findLatestCustomerPendingOnVehicle(
+  supabase: ReturnType<typeof getSupabaseClient>,
+  customerId: string,
+  vehicleId: string,
+): Promise<Booking | null> {
+  const { data: rows, error } = await supabase
+    .from('bookings')
+    .select('*')
+    .eq('customer_id', customerId)
+    .eq('vehicle_id', vehicleId)
+    .eq('status', 'pending')
+    .is('deleted_at', null)
+    .order('created_at', { ascending: false })
+    .limit(1)
+  if (error) throw new Error(error.message)
+  const row = rows?.[0]
+  if (!row?.id || !isUuid(row.id)) return null
+  return mapBooking(row as Parameters<typeof mapBooking>[0], [])
+}
+
 async function attachRenterDocuments(
   supabase: ReturnType<typeof getSupabaseClient>,
   bookingId: string,
@@ -94,15 +132,21 @@ async function attachRenterDocuments(
   const paths = await persistRenterDocuments(bookingId, input.renterDocuments)
   if (!paths.license && !paths.validId && !paths.proofOfBilling) return
 
-  const { error } = await supabase
-    .from('bookings')
-    .update({
-      document_storage_path: paths.license ?? input.documentName ?? null,
-      valid_id_storage_path: paths.validId ?? null,
-      proof_of_billing_storage_path: paths.proofOfBilling ?? null,
-    })
-    .eq('id', bookingId)
-  if (error) throw new Error(error.message)
+  const fullPatch = {
+    document_storage_path: paths.license ?? input.documentName ?? null,
+    valid_id_storage_path: paths.validId ?? null,
+    proof_of_billing_storage_path: paths.proofOfBilling ?? null,
+  }
+  const { error } = await supabase.from('bookings').update(fullPatch).eq('id', bookingId)
+  if (!error) return
+
+  if (isRenterDocColumnMissing(error.message)) {
+    const legacy = { document_storage_path: paths.license ?? input.documentName ?? null }
+    const { error: legacyError } = await supabase.from('bookings').update(legacy).eq('id', bookingId)
+    if (legacyError) throw new Error(legacyError.message)
+    return
+  }
+  throw new Error(error.message)
 }
 
 async function attachBookingContract(
@@ -161,7 +205,28 @@ export async function createBooking(input: CreateBookingInput): Promise<Booking>
   const vehicle = await resolveFleetVehicle(supabase, snap.vehicles, input.vehicleId)
   const vehicleId = vehicle.id
 
-  const existingPending = await findPendingBookingInDatabase(supabase, customerId, vehicleId, input)
+  let existingPending = await findPendingBookingInDatabase(supabase, customerId, vehicleId, input)
+  if (!existingPending) {
+    const fromSnapshot = findMatchingPendingBooking(snap.bookings, customerId, {
+      vehicleId,
+      pickupDate: input.pickupDate,
+      returnDate: input.returnDate,
+      pickupTime: input.pickupTime,
+      returnTime: input.returnTime,
+    })
+    if (fromSnapshot && isUuid(fromSnapshot.id)) {
+      existingPending = fromSnapshot
+    } else {
+      const loose = await findLatestCustomerPendingOnVehicle(supabase, customerId, vehicleId)
+      if (
+        loose &&
+        loose.pickupDate === input.pickupDate &&
+        loose.returnDate === input.returnDate
+      ) {
+        existingPending = loose
+      }
+    }
+  }
 
   const issues = scheduleIssues(
     {
@@ -230,19 +295,33 @@ export async function createBooking(input: CreateBookingInput): Promise<Booking>
 
   if (error) {
     if (error.message.includes('bookings_no_overlap') || error.code === '23P01') {
-      throw new Error('Those dates overlap an existing reservation for this vehicle.')
+      const sameCustomer = await findLatestCustomerPendingOnVehicle(supabase, customerId, vehicleId)
+      if (sameCustomer) {
+        return resumePendingBooking(supabase, sameCustomer, input, pricing, snap)
+      }
+      throw new Error('Those dates are no longer available for this vehicle. Pick different dates and try again.')
     }
     throw new Error(error.message)
   }
 
-  await attachRenterDocuments(supabase, row.id, input)
+  try {
+    await attachRenterDocuments(supabase, row.id, input)
+  } catch (attachError) {
+    const message = attachError instanceof Error ? attachError.message : ''
+    if (!isStorageAlreadyStored(message) && !isRenterDocColumnMissing(message)) throw attachError
+  }
 
   if (input.contract) {
-    const contractMeta = await attachBookingContract(supabase, row, input.contract)
-    row.id = contractMeta.id
-    row.contract_storage_path = contractMeta.contract_storage_path
-    row.contract_signed_at = contractMeta.contract_signed_at
-    row.contract_signer_name = contractMeta.contract_signer_name
+    try {
+      const contractMeta = await attachBookingContract(supabase, row, input.contract)
+      row.id = contractMeta.id
+      row.contract_storage_path = contractMeta.contract_storage_path
+      row.contract_signed_at = contractMeta.contract_signed_at
+      row.contract_signer_name = contractMeta.contract_signer_name
+    } catch (attachError) {
+      const message = attachError instanceof Error ? attachError.message : ''
+      if (!isStorageAlreadyStored(message)) throw attachError
+    }
   }
 
   const { data: refreshed, error: refreshError } = await supabase.from('bookings').select('*').eq('id', row.id).single()
@@ -299,14 +378,24 @@ async function resumePendingBooking(
     throw new Error('Could not update your pending booking. Refresh and try again.')
   }
 
-  await attachRenterDocuments(supabase, row.id, input)
+  try {
+    await attachRenterDocuments(supabase, row.id, input)
+  } catch (attachError) {
+    const message = attachError instanceof Error ? attachError.message : ''
+    if (!isStorageAlreadyStored(message) && !isRenterDocColumnMissing(message)) throw attachError
+  }
 
   if (input.contract) {
-    const contractMeta = await attachBookingContract(supabase, row, input.contract)
-    row.id = contractMeta.id
-    row.contract_storage_path = contractMeta.contract_storage_path
-    row.contract_signed_at = contractMeta.contract_signed_at
-    row.contract_signer_name = contractMeta.contract_signer_name
+    try {
+      const contractMeta = await attachBookingContract(supabase, row, input.contract)
+      row.id = contractMeta.id
+      row.contract_storage_path = contractMeta.contract_storage_path
+      row.contract_signed_at = contractMeta.contract_signed_at
+      row.contract_signer_name = contractMeta.contract_signer_name
+    } catch (attachError) {
+      const message = attachError instanceof Error ? attachError.message : ''
+      if (!isStorageAlreadyStored(message)) throw attachError
+    }
   }
 
   const { data: refreshed, error: refreshError } = await supabase.from('bookings').select('*').eq('id', row.id).single()

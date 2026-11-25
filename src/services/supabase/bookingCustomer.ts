@@ -2,7 +2,6 @@ import { getSupabaseClient } from '@/lib/supabase/client'
 import { fetchProfile } from '@/services/auth/authService'
 import { useAuthSessionStore } from '@/stores/authSessionStore'
 import type { CustomerDraft } from '@/types'
-import { generateSecurePassword } from '@/utils/password'
 
 async function syncCustomerProfile(customerId: string, customer: CustomerDraft) {
   const supabase = getSupabaseClient()
@@ -59,7 +58,10 @@ export async function resolveBookingCustomerId(
   }
 
   const email = customer.email.trim().toLowerCase()
-  const password = generateSecurePassword()
+  const password = customer.password?.trim()
+  if (!password || password.length < 8) {
+    throw new Error('Choose a password for your account (at least 8 characters).')
+  }
 
   const { data, error } = await supabase.auth.signUp({
     email,

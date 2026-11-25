@@ -2,8 +2,6 @@ import { getSupabaseClient } from '@/lib/supabase/client'
 import { DOC_ACCEPT, IMAGE_ACCEPT, IMAGE_MAX_BYTES, VIDEO_ACCEPT, VIDEO_MAX_BYTES, type StorageBucketId } from '@/lib/storage/buckets'
 import { parseStorageObjectPath } from '@/services/storage/paths'
 import { resizeImageFile } from '@/utils/files'
-import { friendlyErrorMessage } from '@/utils/friendlyError'
-
 export type UploadProgress = (ratio: number) => void
 
 function validateFile(file: File, accept: readonly string[], maxBytes: number) {
@@ -30,7 +28,7 @@ export async function uploadStorageObject(
   })
   options?.onProgress?.(1)
   if (error) {
-    throw new Error(friendlyErrorMessage(error, 'booking'))
+    throw new Error(error.message || 'Upload failed.')
   }
   return fullPath
 }
@@ -61,11 +59,11 @@ export async function uploadDocumentAsset(fullPath: string, file: File, onProgre
   })
 }
 
-/** Signed rental contracts: never upsert (avoid touching orphan paths from failed attempts). */
+/** Re-tapping Confirm reuses the same contract path — upsert so a retry does not fail. */
 export async function uploadContractAsset(fullPath: string, file: File, onProgress?: UploadProgress) {
   validateFile(file, DOC_ACCEPT, 8 * 1024 * 1024)
   return uploadStorageObject(fullPath, file, {
-    upsert: false,
+    upsert: true,
     contentType: 'application/pdf',
     onProgress,
   })
