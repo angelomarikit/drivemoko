@@ -1,3 +1,4 @@
+import { Banknote, CircleDollarSign, Clock, ShieldCheck, Wallet, XCircle } from 'lucide-react'
 import { zodResolver } from '@hookform/resolvers/zod'
 import FullCalendar from '@fullcalendar/react'
 import dayGridPlugin from '@fullcalendar/daygrid'
@@ -927,49 +928,228 @@ function CustomerProfileSnippet({ person, onClose }: { person: User; onClose: ()
   )
 }
 
+function PaymentMethodLabel({ method }: { method: PaymentMethod }) {
+  const labels: Record<PaymentMethod, string> = {
+    cash: 'Cash',
+    gcash: 'GCash',
+    maya: 'Maya',
+    bank: 'Bank transfer',
+  }
+  return <span className="font-medium text-ink">{labels[method] ?? method}</span>
+}
+
+function PaymentKpi({
+  label,
+  value,
+  icon: Icon,
+  tone,
+  hint,
+}: {
+  label: string
+  value: string
+  icon: typeof Wallet
+  tone: string
+  hint?: string
+}) {
+  return (
+    <Panel className="flex gap-3">
+      <span className={cn('grid h-11 w-11 shrink-0 place-items-center rounded-xl', tone)}>
+        <Icon className="h-5 w-5" aria-hidden />
+      </span>
+      <div className="min-w-0">
+        <p className="text-sm text-muted">{label}</p>
+        <p className="text-2xl font-extrabold tracking-tight text-ink">{value}</p>
+        {hint ? <p className="mt-0.5 text-xs text-muted">{hint}</p> : null}
+      </div>
+    </Panel>
+  )
+}
+
 export function PaymentsBoard() {
   const { data } = useSnapshot()
   const actions = useDemoActions()
   const [params] = useSearchParams()
   const [open, setOpen] = useState(params.get('new') === '1')
-  const [filter, setFilter] = useState('all')
+  const [filter, setFilter] = useState<'all' | 'pending' | 'verified' | 'rejected'>('all')
+
+  const pendingCount = data?.payments.filter((payment) => payment.status === 'pending').length ?? 0
+  const rejectedCount = data?.payments.filter((payment) => payment.status === 'rejected').length ?? 0
+  const verified =
+    data?.payments.filter((payment) => payment.status === 'verified').reduce((sum, payment) => sum + payment.amount, 0) ?? 0
+  const outstanding = data ? outstandingReceivables(data.bookings, data.payments) : 0
+
+  const rows = useMemo(() => {
+    if (!data) return []
+    const list = data.payments.filter((payment) => filter === 'all' || payment.status === filter)
+    return [...list].sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+  }, [data, filter])
+
   if (!data) return null
-  const rows = data.payments.filter((payment) => filter === 'all' || payment.status === filter)
-  const verified = data.payments.filter((payment) => payment.status === 'verified').reduce((sum, payment) => sum + payment.amount, 0)
-  const outstanding = outstandingReceivables(data.bookings, data.payments)
+
+  const filterTabs: { id: typeof filter; label: string; count: number }[] = [
+    { id: 'all', label: 'All', count: data.payments.length },
+    { id: 'pending', label: 'Pending', count: pendingCount },
+    { id: 'verified', label: 'Verified', count: data.payments.filter((p) => p.status === 'verified').length },
+    { id: 'rejected', label: 'Rejected', count: rejectedCount },
+  ]
+
   return (
     <div className="space-y-4">
-      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-        <Panel><p className="text-sm text-muted">Verified</p><p className="text-2xl font-extrabold">{formatPeso(verified)}</p></Panel>
-        <Panel><p className="text-sm text-muted">Outstanding receivables</p><p className="text-2xl font-extrabold">{formatPeso(outstanding)}</p></Panel>
-        <Panel><p className="text-sm text-muted">Pending checks</p><p className="text-2xl font-extrabold">{data.payments.filter((payment) => payment.status === 'pending').length}</p></Panel>
-        <Panel><p className="text-sm text-muted">Rejected</p><p className="text-2xl font-extrabold">{data.payments.filter((payment) => payment.status === 'rejected').length}</p></Panel>
-      </div>
-      <Panel>
-        <div className="mb-3 flex gap-2">
-          {['all', 'pending', 'verified', 'rejected'].map((item) => <button key={item} className={`rounded-full px-3 py-1 text-xs font-bold capitalize ${filter === item ? 'bg-gold' : 'bg-canvas'}`} onClick={() => setFilter(item)}>{item}</button>)}
-          <Button className="ml-auto" onClick={() => setOpen(true)}>Record payment</Button>
+      <Panel className="flex flex-wrap items-center justify-between gap-3 border-none bg-transparent p-0 shadow-none">
+        <div>
+          <h1 className="text-xl font-extrabold text-ink">Payments</h1>
+          <p className="mt-1 text-sm text-muted">Track collections, verify proofs, and match amounts to bookings.</p>
         </div>
+        <Button type="button" onClick={() => setOpen(true)}>
+          <Banknote className="h-4 w-4" aria-hidden />
+          Record payment
+        </Button>
+      </Panel>
+
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <PaymentKpi
+          label="Verified collections"
+          value={formatPeso(verified)}
+          icon={ShieldCheck}
+          tone="bg-emerald-100 text-emerald-700"
+          hint="Recorded and verified"
+        />
+        <PaymentKpi
+          label="Outstanding receivables"
+          value={formatPeso(outstanding)}
+          icon={CircleDollarSign}
+          tone="bg-sky-100 text-sky-700"
+          hint="From active bookings"
+        />
+        <PaymentKpi
+          label="Pending review"
+          value={String(pendingCount)}
+          icon={Clock}
+          tone="bg-amber-100 text-amber-800"
+          hint={pendingCount ? 'Needs verify or reject' : 'All clear'}
+        />
+        <PaymentKpi
+          label="Rejected"
+          value={String(rejectedCount)}
+          icon={XCircle}
+          tone="bg-rose-100 text-rose-700"
+        />
+      </div>
+
+      <Panel className="overflow-hidden p-0">
+        <div className="flex flex-col gap-3 border-b border-line px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-wrap gap-1.5">
+            {filterTabs.map((tab) => (
+              <button
+                key={tab.id}
+                type="button"
+                className={cn(
+                  'inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-bold transition-colors',
+                  filter === tab.id ? 'bg-gold text-ink shadow-sm' : 'bg-canvas text-muted hover:bg-slate-100',
+                )}
+                onClick={() => setFilter(tab.id)}
+              >
+                {tab.label}
+                <span
+                  className={cn(
+                    'rounded-full px-1.5 py-0.5 text-[10px] font-extrabold tabular-nums',
+                    filter === tab.id ? 'bg-white/60' : 'bg-white text-slate-600',
+                  )}
+                >
+                  {tab.count}
+                </span>
+              </button>
+            ))}
+          </div>
+          <p className="text-xs text-muted">
+            {rows.length} {rows.length === 1 ? 'record' : 'records'}
+            {filter !== 'all' ? ` · ${filter}` : ''}
+          </p>
+        </div>
+
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[720px] text-left text-sm">
-            <thead className="text-xs text-muted"><tr><th>Reference</th><th>Booking</th><th>Method</th><th>Amount</th><th>Status</th><th></th></tr></thead>
+          <table className="w-full min-w-[800px] text-left text-sm">
+            <thead className="bg-canvas/80 text-xs font-bold uppercase tracking-wide text-muted">
+              <tr>
+                <th className="px-4 py-3">Recorded</th>
+                <th className="px-4 py-3">Payment ref</th>
+                <th className="px-4 py-3">Booking</th>
+                <th className="px-4 py-3">Method</th>
+                <th className="px-4 py-3 text-right">Amount</th>
+                <th className="px-4 py-3">Status</th>
+                <th className="px-4 py-3 text-right">Actions</th>
+              </tr>
+            </thead>
             <tbody>
-              {rows.map((payment) => {
-                const booking = data.bookings.find((item) => item.id === payment.bookingId)
-                return (
-                  <tr key={payment.id} className="border-t">
-                    <td className="py-2">{payment.reference}</td>
-                    <td>{booking?.reference}</td>
-                    <td className="capitalize">{payment.method}</td>
-                    <td>{formatPeso(payment.amount)}</td>
-                    <td><StatusBadge value={payment.status} /></td>
-                    <td className="space-x-2 text-xs font-bold">
-                      {payment.status === 'pending' ? <button className="text-success" onClick={() => actions.verifyPayment(payment.id)}>Verify</button> : null}
-                      {payment.status === 'pending' ? <button className="text-danger" onClick={() => actions.rejectPayment(payment.id, 'Payment not verified')}>Reject</button> : null}
-                    </td>
-                  </tr>
-                )
-              })}
+              {rows.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="px-4 py-12 text-center text-muted">
+                    <Wallet className="mx-auto mb-2 h-8 w-8 opacity-40" aria-hidden />
+                    <p className="font-semibold text-ink">No payments in this view</p>
+                    <p className="mt-1 text-xs">Record a payment or switch filters to see other entries.</p>
+                  </td>
+                </tr>
+              ) : (
+                rows.map((payment) => {
+                  const booking = data.bookings.find((item) => item.id === payment.bookingId)
+                  const customer = booking ? data.users.find((u) => u.id === booking.customerId) : undefined
+                  return (
+                    <tr key={payment.id} className="border-t border-line/80 transition-colors hover:bg-canvas/50">
+                      <td className="px-4 py-3 text-muted">{formatPretty(payment.createdAt.slice(0, 10))}</td>
+                      <td className="px-4 py-3">
+                        <span className="font-semibold text-ink">{payment.reference || '—'}</span>
+                        {payment.note ? (
+                          <span className="mt-0.5 block max-w-[12rem] truncate text-xs text-muted" title={payment.note}>
+                            {payment.note}
+                          </span>
+                        ) : null}
+                      </td>
+                      <td className="px-4 py-3">
+                        {booking ? (
+                          <>
+                            <Link
+                              to={`/admin/bookings?open=${booking.id}`}
+                              className="font-semibold text-info hover:underline"
+                            >
+                              {booking.reference}
+                            </Link>
+                            {customer ? <span className="mt-0.5 block text-xs text-muted">{customer.name}</span> : null}
+                          </>
+                        ) : (
+                          <span className="text-muted">Not linked</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        <PaymentMethodLabel method={payment.method} />
+                      </td>
+                      <td className="px-4 py-3 text-right font-extrabold tabular-nums text-ink">{formatPeso(payment.amount)}</td>
+                      <td className="px-4 py-3">
+                        <StatusBadge value={payment.status} />
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        {payment.status === 'pending' ? (
+                          <div className="inline-flex flex-wrap justify-end gap-1.5">
+                            <Button type="button" size="sm" variant="soft" onClick={() => void actions.verifyPayment(payment.id)}>
+                              Verify
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              className="text-danger border-danger/30"
+                              onClick={() => void actions.rejectPayment(payment.id, 'Payment not verified')}
+                            >
+                              Reject
+                            </Button>
+                          </div>
+                        ) : (
+                          <span className="text-xs text-muted">—</span>
+                        )}
+                      </td>
+                    </tr>
+                  )
+                })
+              )}
             </tbody>
           </table>
         </div>
@@ -987,44 +1167,81 @@ function PaymentDialog({ open, onClose, bookingId }: { open: boolean; onClose: (
   if (!data) return null
   return (
     <Modal open={open} onClose={onClose} title="Record payment" description="Record cash, GCash, Maya, or bank transfer. Verified amounts update booking balances.">
-      <div className="grid gap-3">
-        <SelectInput value={form.bookingId} onChange={(event) => setForm({ ...form, bookingId: event.target.value })}>
-          <option value="">Booking</option>
-          {data.bookings.map((booking) => <option key={booking.id} value={booking.id}>{booking.reference}</option>)}
-        </SelectInput>
-        <TextInput type="number" placeholder="Amount" value={form.amount} onChange={(event) => setForm({ ...form, amount: event.target.value })} />
-        <SelectInput value={form.method} onChange={(event) => setForm({ ...form, method: event.target.value as PaymentMethod })}>
-          <option value="cash">Cash</option>
-          <option value="gcash">GCash</option>
-          <option value="maya">Maya</option>
-          <option value="bank">Bank transfer</option>
-        </SelectInput>
-        <TextInput placeholder="Reference" value={form.reference} onChange={(event) => setForm({ ...form, reference: event.target.value })} />
-        <TextArea placeholder="Note" value={form.note} onChange={(event) => setForm({ ...form, note: event.target.value })} />
-        <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={form.markVerified} onChange={(event) => setForm({ ...form, markVerified: event.target.checked })} /> Mark verified now</label>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <label className="sm:col-span-2 block">
+          <FieldLabel required>Booking</FieldLabel>
+          <SelectInput value={form.bookingId} onChange={(event) => setForm({ ...form, bookingId: event.target.value })}>
+            <option value="">Select booking</option>
+            {data.bookings.map((booking) => (
+              <option key={booking.id} value={booking.id}>
+                {booking.reference} · {formatPeso(booking.pricing.total)}
+              </option>
+            ))}
+          </SelectInput>
+        </label>
+        <label className="block">
+          <FieldLabel required>Amount (₱)</FieldLabel>
+          <TextInput type="number" min={0} step="0.01" value={form.amount} onChange={(event) => setForm({ ...form, amount: event.target.value })} />
+        </label>
+        <label className="block">
+          <FieldLabel required>Method</FieldLabel>
+          <SelectInput value={form.method} onChange={(event) => setForm({ ...form, method: event.target.value as PaymentMethod })}>
+            <option value="cash">Cash</option>
+            <option value="gcash">GCash</option>
+            <option value="maya">Maya</option>
+            <option value="bank">Bank transfer</option>
+          </SelectInput>
+        </label>
+        <label className="block sm:col-span-2">
+          <FieldLabel>Payment reference</FieldLabel>
+          <TextInput placeholder="Receipt no., transfer ref, etc." value={form.reference} onChange={(event) => setForm({ ...form, reference: event.target.value })} />
+        </label>
+        <label className="block sm:col-span-2">
+          <FieldLabel>Internal note</FieldLabel>
+          <TextArea placeholder="Optional note for staff" value={form.note} onChange={(event) => setForm({ ...form, note: event.target.value })} />
+        </label>
+        <label className="flex items-center gap-2 text-sm sm:col-span-2">
+          <input
+            type="checkbox"
+            className="rounded border-slate-300"
+            checked={form.markVerified}
+            onChange={(event) => setForm({ ...form, markVerified: event.target.checked })}
+          />
+          Mark verified immediately
+        </label>
         {isSupabaseProvider() ? (
-          <label className="text-sm">
-            Payment proof (optional)
+          <label className="block sm:col-span-2">
+            <FieldLabel>Payment proof (optional)</FieldLabel>
             <input
-              className="mt-1 block w-full text-xs"
+              className="mt-1 block w-full rounded-xl border border-line bg-white px-3 py-2 text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-canvas file:px-3 file:py-1.5 file:text-xs file:font-bold"
               type="file"
               accept="image/jpeg,image/png,image/webp,application/pdf"
               onChange={(event) => setProofFile(event.target.files?.[0] ?? null)}
             />
           </label>
         ) : null}
-        <Button onClick={async () => {
-          const saved = await actions.recordPayment({
-            bookingId: form.bookingId,
-            amount: Number(form.amount),
-            method: form.method,
-            reference: form.reference,
-            note: form.note,
-            markVerified: form.markVerified,
-            proofFile: proofFile ?? undefined,
-          })
-          if (saved) onClose()
-        }}>Save payment</Button>
+        <div className="flex flex-wrap gap-2 pt-1 sm:col-span-2">
+          <Button
+            type="button"
+            onClick={async () => {
+              const saved = await actions.recordPayment({
+                bookingId: form.bookingId,
+                amount: Number(form.amount),
+                method: form.method,
+                reference: form.reference,
+                note: form.note,
+                markVerified: form.markVerified,
+                proofFile: proofFile ?? undefined,
+              })
+              if (saved) onClose()
+            }}
+          >
+            Save payment
+          </Button>
+          <Button type="button" variant="outline" onClick={onClose}>
+            Cancel
+          </Button>
+        </div>
       </div>
     </Modal>
   )
