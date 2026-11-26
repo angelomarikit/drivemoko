@@ -43,8 +43,12 @@ export function suggestEmailLocal(fullName: string) {
     .slice(0, 32)
 }
 
-function edgeFunctionUnavailable(message: string) {
-  return /function|edge function|failed to send a request|404|not found/i.test(message)
+function edgeTransportFailure(message: string) {
+  return /function|edge function|failed to send|404|not found|cors|network|fetch failed|err_failed/i.test(message)
+}
+
+function partnerProvisioningError(message: string) {
+  return /already registered|already exists|invalid email|admin only|invalid username/i.test(message)
 }
 
 function migrationHint(errorMessage: string) {
@@ -140,13 +144,16 @@ async function registerPartnerViaEdgeFunction(
     body: { ...input, emailLocal: input.emailLocal },
   })
   if (error) {
-    if (edgeFunctionUnavailable(error.message)) {
-      throw error
+    const transport = edgeTransportFailure(error.message)
+    if (transport) {
+      const wrapped = new Error(error.message)
+      ;(wrapped as Error & { edgeTransport?: boolean }).edgeTransport = true
+      throw wrapped
     }
     throw new Error(error.message)
   }
   const payload = data as { ok?: boolean; error?: string; userId?: string; email?: string }
-  if (payload?.error) throw new Error(payload.error)
+  if (payload?.error) throw new Error(payload.error + migrationHint(payload.error))
   if (!payload?.userId || !payload?.email) {
     throw new Error('Partner account was not created. Check Edge Function logs.')
   }
@@ -159,13 +166,28 @@ export async function registerPartnerAccount(input: RegisterPartnerInput): Promi
   }
   const email = buildPartnerEmail(input.emailLocal)
 
+  let edgeMessage = ''
   try {
     return await registerPartnerViaEdgeFunction(input)
   } catch (edgeError) {
-    const message = edgeError instanceof Error ? edgeError.message : String(edgeError)
-    if (!edgeFunctionUnavailable(message)) {
-      throw edgeError instanceof Error ? edgeError : new Error(message)
+    edgeMessage = edgeError instanceof Error ? edgeError.message : String(edgeError)
+    if (partnerProvisioningError(edgeMessage)) {
+      throw edgeError instanceof Error ? edgeError : new Error(edgeMessage)
     }
-    return registerPartnerWithoutEdgeFunction(input, email)
+    const transport =
+      edgeTransportFailure(edgeMessage) ||
+      Boolean((edgeError as Error & { edgeTransport?: boolean }).edgeTransport)
+    if (!transport) {
+      throw edgeError instanceof Error ? edgeError : new Error(edgeMessage)
+    }
+  }
+
+  try {
+    return await registerPartnerWithoutEdgeFunction(input, email)
+  } catch (fallbackError) {
+    const fb = fallbackError instanceof Error ? fallbackError.message : String(fallbackError)
+    throw new Error(
+      `Could not reach create-partner-account (${edgeMessage || 'unavailable'}). Sign-up fallback failed: ${fb}`,
+    )
   }
 }

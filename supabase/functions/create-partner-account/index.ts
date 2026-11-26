@@ -3,6 +3,7 @@ import { createClient } from 'jsr:@supabase/supabase-js@2'
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
 }
 
 const PARTNER_EMAIL_DOMAIN = 'drivemoko.com'
@@ -92,7 +93,7 @@ Deno.serve(async (req) => {
       .eq('id', userId)
 
     const shareBps = 7000
-    const { error: finalizeError } = await userClient.rpc('admin_finalize_partner_profile', {
+    const { error: finalizeError } = await adminClient.rpc('admin_finalize_partner_profile', {
       p_profile_id: userId,
       p_share_rate_bps: shareBps,
       p_business_name: body.businessName,

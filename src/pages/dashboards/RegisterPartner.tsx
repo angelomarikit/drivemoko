@@ -119,9 +119,11 @@ export function RegisterPartnerPage() {
         </div>
         {isSupabaseProvider() ? (
           <p className="mt-3 rounded-2xl bg-canvas px-3 py-2 text-xs text-muted">
-            Requires SQL migration <code className="text-[11px]">022_partner_registration.sql</code>. Partner creation
-            uses the <code className="text-[11px]">create-partner-account</code> Edge Function when deployed; otherwise
-            the app creates the auth user via sign-up and finalizes the partner profile as admin.
+            Run migrations <code className="text-[11px]">022</code> / <code className="text-[11px]">022b</code>. Deploy{' '}
+            <code className="text-[11px]">create-partner-account</code> on Supabase (
+            <code className="text-[11px]">supabase functions deploy create-partner-account</code>) to avoid CORS errors
+            and to create partners when public sign-up is disabled. If the function is missing, the app falls back to
+            sign-up while you stay signed in as admin.
           </p>
         ) : null}
       </Panel>

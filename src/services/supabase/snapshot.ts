@@ -9,10 +9,10 @@ const profileColumns = `id, role, full_name, email, phone, address, title, statu
         license_number, emergency_name, emergency_phone, notes, created_at`
 
 const partnerProfilesMinimal = `partner_profiles ( share_rate_bps )`
+/** 022 partner registration fields — omit rate_* centavos (025) so older DBs still load. */
 const partnerProfilesExtended = `partner_profiles (
           share_rate_bps, business_name, vehicle_count, ownership_type,
-          vehicle_summary, contract_reference, contract_notes, contact_person, agreement_signed_at,
-          rate_first_day_centavos, rate_succeeding_day_centavos, rate_10_days_centavos, rate_15_plus_centavos
+          vehicle_summary, contract_reference, contract_notes, contact_person, agreement_signed_at
         )`
 
 function profileSelectNeedsFallback(error: { message?: string; code?: string; status?: number }) {
@@ -42,22 +42,24 @@ async function fetchVehiclesSnapshot(supabase: ReturnType<typeof getSupabaseClie
     .is('deleted_at', null)
     .order('created_at', { ascending: false })
   if (!extended.error) return extended
-  if (!profileSelectNeedsFallback(extended.error)) return extended
-  return supabase
+  const legacy = await supabase
     .from('vehicles')
     .select(`${vehicleColumns}, price_per_day_centavos, listing_status, listing_active, owner_id, partner_id`)
     .is('deleted_at', null)
     .order('created_at', { ascending: false })
+  if (!legacy.error) return legacy
+  if (!profileSelectNeedsFallback(extended.error) && !profileSelectNeedsFallback(legacy.error)) return extended
+  return legacy
 }
 
 async function fetchProfilesSnapshot(supabase: ReturnType<typeof getSupabaseClient>) {
   const extended = await supabase.from('profiles').select(`${profileColumns}, ${partnerProfilesExtended}`)
   if (!extended.error) return extended
-  if (!profileSelectNeedsFallback(extended.error)) return extended
   const minimal = await supabase.from('profiles').select(`${profileColumns}, ${partnerProfilesMinimal}`)
   if (!minimal.error) return minimal
-  if (!profileSelectNeedsFallback(minimal.error)) return minimal
-  return supabase.from('profiles').select(profileColumns)
+  const bare = await supabase.from('profiles').select(profileColumns)
+  if (!bare.error) return bare
+  return extended.error ? extended : minimal.error ? minimal : bare
 }
 
 export async function fetchSupabaseSnapshot(): Promise<DemoData> {
