@@ -24,14 +24,14 @@ import { homeForRole } from '@/utils/bookingRules'
 import { toast } from 'sonner'
 import { cn } from '@/utils/cn'
 
-const authNavLinks = [
+const authNavLinks: { to: string; label: string; end?: boolean }[] = [
   { to: '/', label: 'Home', end: true },
   { to: '/cars', label: 'Available Cars' },
   { to: '/how-it-works', label: 'How It Works' },
   { to: '/become-a-partner', label: 'Become a Partner' },
   { to: '/about', label: 'About Us' },
   { to: '/contact', label: 'Contact' },
-] as const
+]
 
 const registerSchema = z
   .object({
