@@ -90,7 +90,7 @@ export async function listIncompletePartnerSignups(): Promise<IncompletePartnerS
     .from('profiles')
     .select('id, email, full_name, role')
     .ilike('email', `%@${PARTNER_EMAIL_DOMAIN}`)
-    .neq('role', 'partner')
+    .eq('role', 'customer')
     .order('created_at', { ascending: false })
   if (error) throw new Error(error.message)
   return (data ?? []) as IncompletePartnerSignup[]
@@ -148,6 +148,14 @@ async function finalizePartnerProfile(
     p_notes: input.profileNotes,
   })
   if (error) {
+    const missingRpc =
+      error.code === 'PGRST202' ||
+      /could not find the function|function .* does not exist|404/i.test(error.message)
+    if (missingRpc) {
+      throw new Error(
+        'Partner finalize is not installed on the database. In Supabase → SQL Editor, run migration file 039_ensure_partner_finalize_rpc.sql (or 022 + 022b), then try again.',
+      )
+    }
     throw new Error(error.message + migrationHint(error.message))
   }
 }

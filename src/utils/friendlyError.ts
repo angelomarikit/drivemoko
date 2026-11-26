@@ -108,6 +108,14 @@ export function friendlyErrorMessage(error: unknown, context: ErrorContext = 'ge
     return 'Your session expired. Please sign in again.'
   }
 
+  if (
+    lower.includes('admin_finalize_partner_profile') ||
+    lower.includes('partner finalize is not installed') ||
+    lower.includes('pgrst202')
+  ) {
+    return 'Partner setup is missing in the database. An admin must run SQL migration 039_ensure_partner_finalize_rpc.sql in Supabase, then try Finalize again.'
+  }
+
   if (lower.includes('network') || lower.includes('fetch') || lower.includes('failed to fetch')) {
     return 'We could not reach the server. Check your connection and try again.'
   }
