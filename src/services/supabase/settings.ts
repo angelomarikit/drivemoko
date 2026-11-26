@@ -17,6 +17,13 @@ export async function saveSupabaseSettings(patch: Partial<Settings>) {
     row.default_rate_10_days_centavos = Math.round(pkg.rate10Days * 100)
     row.default_rate_15_plus_centavos = Math.round(pkg.rate15Plus * 100)
   }
+  const pkgInside = patch.defaultRentalPackageInside
+  if (pkgInside) {
+    row.default_inside_rate_first_day_centavos = Math.round(pkgInside.rateFirstDay * 100)
+    row.default_inside_rate_succeeding_centavos = Math.round(pkgInside.rateSucceeding * 100)
+    row.default_inside_rate_10_days_centavos = Math.round(pkgInside.rate10Days * 100)
+    row.default_inside_rate_15_plus_centavos = Math.round(pkgInside.rate15Plus * 100)
+  }
   const driver = patch.defaultDriverPackage
   if (driver) {
     row.driver_inside_per_day_centavos = Math.round(driver.insidePerDay * 100)

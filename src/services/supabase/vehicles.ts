@@ -10,6 +10,8 @@ async function loadVehicle(id: string) {
       `id, name, brand, model, year, category, seats, transmission, fuel,
       price_per_day_centavos, rate_first_day_centavos, rate_succeeding_day_centavos,
       rate_10_days_centavos, rate_15_plus_centavos,
+      rate_inside_first_day_centavos, rate_inside_succeeding_day_centavos,
+      rate_inside_10_days_centavos, rate_inside_15_plus_centavos,
       listing_status, listing_active, owner_id, partner_id,
       description, features, inclusions, plate_number, offered_rental_types, airconditioning,
       promo_video_path, created_at, vehicle_images ( storage_path, sort_order, is_primary )`,
@@ -77,11 +79,18 @@ export async function updateVehicle(id: string, patch: Partial<VehicleInput>, ac
   if (patch.pricePerDay != null) update.price_per_day_centavos = Math.round(patch.pricePerDay * 100)
   if (patch.rentalPackage != null) {
     const pkg = patch.rentalPackage
-    update.price_per_day_centavos = Math.round(pkg.rateFirstDay * 100)
     update.rate_first_day_centavos = Math.round(pkg.rateFirstDay * 100)
     update.rate_succeeding_day_centavos = Math.round(pkg.rateSucceeding * 100)
     update.rate_10_days_centavos = Math.round(pkg.rate10Days * 100)
     update.rate_15_plus_centavos = Math.round(pkg.rate15Plus * 100)
+    update.price_per_day_centavos = Math.round(pkg.rateFirstDay * 100)
+  }
+  if (patch.rentalPackageInside != null) {
+    const pkg = patch.rentalPackageInside
+    update.rate_inside_first_day_centavos = Math.round(pkg.rateFirstDay * 100)
+    update.rate_inside_succeeding_day_centavos = Math.round(pkg.rateSucceeding * 100)
+    update.rate_inside_10_days_centavos = Math.round(pkg.rate10Days * 100)
+    update.rate_inside_15_plus_centavos = Math.round(pkg.rate15Plus * 100)
   }
   if (patch.description != null) update.description = patch.description
   if (patch.features != null) update.features = patch.features

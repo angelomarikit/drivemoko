@@ -80,6 +80,10 @@ type VehicleRow = {
   rate_succeeding_day_centavos?: number | null
   rate_10_days_centavos?: number | null
   rate_15_plus_centavos?: number | null
+  rate_inside_first_day_centavos?: number | null
+  rate_inside_succeeding_day_centavos?: number | null
+  rate_inside_10_days_centavos?: number | null
+  rate_inside_15_plus_centavos?: number | null
   listing_status: Vehicle['listingStatus']
   listing_active: boolean
   owner_id: string | null
@@ -150,7 +154,12 @@ type HistoryRow = {
 
 const centavosToPeso = (c: number) => c / 100
 
-function mapVehicleRentalPackage(row: VehicleRow) {
+function mapVehicleRentalPackageFromRow(row: {
+  rate_first_day_centavos?: number | null
+  rate_succeeding_day_centavos?: number | null
+  rate_10_days_centavos?: number | null
+  rate_15_plus_centavos?: number | null
+}) {
   if (row.rate_first_day_centavos == null) return undefined
   const first = row.rate_first_day_centavos
   return {
@@ -159,6 +168,26 @@ function mapVehicleRentalPackage(row: VehicleRow) {
     rate10Days: centavosToPeso(row.rate_10_days_centavos ?? first),
     rate15Plus: centavosToPeso(row.rate_15_plus_centavos ?? first),
   }
+}
+
+function mapVehicleRentalPackageInsideFromRow(row: {
+  rate_inside_first_day_centavos?: number | null
+  rate_inside_succeeding_day_centavos?: number | null
+  rate_inside_10_days_centavos?: number | null
+  rate_inside_15_plus_centavos?: number | null
+}) {
+  if (row.rate_inside_first_day_centavos == null) return undefined
+  const first = row.rate_inside_first_day_centavos
+  return {
+    rateFirstDay: centavosToPeso(first),
+    rateSucceeding: centavosToPeso(row.rate_inside_succeeding_day_centavos ?? first),
+    rate10Days: centavosToPeso(row.rate_inside_10_days_centavos ?? first),
+    rate15Plus: centavosToPeso(row.rate_inside_15_plus_centavos ?? first),
+  }
+}
+
+function mapVehicleRentalPackage(row: VehicleRow) {
+  return mapVehicleRentalPackageFromRow(row)
 }
 
 type PartnerRateRow = {
@@ -230,6 +259,7 @@ export function mapVehicle(row: VehicleRow): Vehicle {
     fuel: row.fuel,
     pricePerDay: centavosToPeso(row.price_per_day_centavos),
     rentalPackage: mapVehicleRentalPackage(row),
+    rentalPackageInside: mapVehicleRentalPackageInsideFromRow(row),
     listingStatus: row.listing_status,
     listingActive: row.listing_active,
     ownerId: row.owner_id,

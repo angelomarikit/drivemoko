@@ -198,7 +198,7 @@ export const useDemoStore = create<DemoState>()(
           state,
         )
         if (issues.length) throw new DemoError(issues[0])
-        const pkg = resolveRentalPackage(vehicle, state.settings)
+        const pkg = resolveRentalPackage(vehicle, state.settings, input.rentalZone ?? 'inside')
         const pricing = quotePackage(
           pkg,
           input.pickupDate,
@@ -359,7 +359,7 @@ export const useDemoStore = create<DemoState>()(
         if (issues.length) throw new DemoError(issues[0])
         const vehicle = state.vehicles.find((item) => item.id === next.vehicleId)
         if (!vehicle) throw new DemoError('Vehicle not found.')
-        const pkg = resolveRentalPackage(vehicle, get().settings)
+        const pkg = resolveRentalPackage(vehicle, get().settings, 'inside')
         next.pricing = quotePackage(
           pkg,
           next.pickupDate,
@@ -791,6 +791,10 @@ export const useDemoStore = create<DemoState>()(
             defaultRentalPackage: {
               ...DEFAULT_SETTINGS.defaultRentalPackage,
               ...data.settings?.defaultRentalPackage,
+            },
+            defaultRentalPackageInside: {
+              ...DEFAULT_SETTINGS.defaultRentalPackageInside,
+              ...data.settings?.defaultRentalPackageInside,
             },
             defaultDriverPackage: {
               ...DEFAULT_SETTINGS.defaultDriverPackage,

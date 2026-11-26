@@ -9,6 +9,9 @@ export const DEFAULT_DRIVER_PACKAGE: DriverPackageSettings = {
 
 export type DriverServiceZone = 'inside' | 'outside'
 
+/** Self-drive / base rental tier selection (same inside vs outside province). */
+export type RentalServiceZone = DriverServiceZone
+
 export const OUTSIDE_NUEVA_VIZCAYA_LOCATION = 'Outside Nueva Vizcaya'
 
 export function isOutsideNuevaVizcaya(pickupLocation: string) {

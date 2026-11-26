@@ -11,7 +11,12 @@ import { useDemoActions, useSession, useSnapshot } from '@/hooks/useDemo'
 import type { FuelType, Transmission, Vehicle, VehicleCategory } from '@/types'
 import { isPubliclyBookable } from '@/utils/bookingRules'
 import { formatPeso } from '@/utils/money'
-import { formatRentalPriceRange, rentalPackageRateBounds, resolveRentalPackage } from '@/utils/rentalPackage'
+import {
+  formatRentalPriceRangeCombined,
+  rentalPackageRateBounds,
+  resolveRentalPackage,
+  resolveRentalPackages,
+} from '@/utils/rentalPackage'
 
 const categories: Array<VehicleCategory | 'MPV/Van'> = ['SUV', 'Sedan', 'MPV/Van', 'Pickup', 'Others']
 
@@ -218,7 +223,9 @@ export function CarsPage() {
                       <h2 className="font-bold">{vehicle.name}</h2>
                       <p className="mt-1 text-xs text-muted">{vehicle.seats} Seater · {vehicle.transmission} · {vehicle.fuel}</p>
                       <p className="mt-2 text-lg font-extrabold text-[#f59e0b]">
-                        {data ? formatRentalPriceRange(resolveRentalPackage(vehicle, data.settings), formatPeso) : formatPeso(vehicle.pricePerDay)}{' '}
+                        {data
+                          ? formatRentalPriceRangeCombined(resolveRentalPackages(vehicle, data.settings), formatPeso)
+                          : formatPeso(vehicle.pricePerDay)}{' '}
                         <span className="text-xs font-semibold text-muted">/ day</span>
                       </p>
                       <div className="mt-3 grid grid-cols-2 gap-2">

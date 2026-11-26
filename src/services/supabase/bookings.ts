@@ -340,7 +340,7 @@ export async function createBooking(input: CreateBookingInput): Promise<Booking>
   )
   if (issues.length) throw new Error(issues[0])
 
-  const pkg = resolveRentalPackage(vehicle, snap.settings)
+  const pkg = resolveRentalPackage(vehicle, snap.settings, input.rentalZone ?? 'inside')
   const pricing = quotePackage(
     pkg,
     input.pickupDate,
@@ -387,6 +387,7 @@ export async function createBooking(input: CreateBookingInput): Promise<Booking>
       price_driver_centavos: Math.round(pricing.driver * 100),
       price_child_seat_centavos: Math.round(pricing.childSeat * 100),
       price_total_centavos: Math.round(pricing.total * 100),
+      rental_service_zone: input.rentalZone ?? 'inside',
     })
     .select('*')
     .single()

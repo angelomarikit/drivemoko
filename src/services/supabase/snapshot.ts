@@ -32,8 +32,10 @@ const vehicleColumns = `id, name, brand, model, year, category, seats, transmiss
         created_at, vehicle_images ( storage_path, sort_order, is_primary )`
 
 const vehicleRates = `price_per_day_centavos, rate_first_day_centavos, rate_succeeding_day_centavos,
-        rate_10_days_centavos, rate_15_plus_centavos, promo_video_path,
-        listing_status, listing_active, owner_id, partner_id`
+        rate_10_days_centavos, rate_15_plus_centavos,
+        rate_inside_first_day_centavos, rate_inside_succeeding_day_centavos,
+        rate_inside_10_days_centavos, rate_inside_15_plus_centavos,
+        promo_video_path, listing_status, listing_active, owner_id, partner_id`
 
 async function fetchVehiclesSnapshot(supabase: ReturnType<typeof getSupabaseClient>) {
   const extended = await supabase
@@ -125,6 +127,10 @@ export async function fetchSupabaseSnapshot(): Promise<DemoData> {
       default_rate_succeeding_centavos?: number
       default_rate_10_days_centavos?: number
       default_rate_15_plus_centavos?: number
+      default_inside_rate_first_day_centavos?: number
+      default_inside_rate_succeeding_centavos?: number
+      default_inside_rate_10_days_centavos?: number
+      default_inside_rate_15_plus_centavos?: number
       default_share_first_day_centavos?: number
       default_share_succeeding_centavos?: number
       default_share_10_days_centavos?: number
@@ -135,6 +141,7 @@ export async function fetchSupabaseSnapshot(): Promise<DemoData> {
       security_deposit_centavos?: number
     }
     const pkgDefault = DEFAULT_SETTINGS.defaultRentalPackage
+    const pkgInsideDefault = DEFAULT_SETTINGS.defaultRentalPackageInside
     const driverDefault = DEFAULT_SETTINGS.defaultDriverPackage
     const toPeso = (centavos: number | undefined, fallback: number) =>
       (centavos ?? Math.round(fallback * 100)) / 100
@@ -150,6 +157,12 @@ export async function fetchSupabaseSnapshot(): Promise<DemoData> {
         rateSucceeding: toPeso(row.default_rate_succeeding_centavos, pkgDefault.rateSucceeding),
         rate10Days: toPeso(row.default_rate_10_days_centavos, pkgDefault.rate10Days),
         rate15Plus: toPeso(row.default_rate_15_plus_centavos, pkgDefault.rate15Plus),
+      },
+      defaultRentalPackageInside: {
+        rateFirstDay: toPeso(row.default_inside_rate_first_day_centavos, pkgInsideDefault.rateFirstDay),
+        rateSucceeding: toPeso(row.default_inside_rate_succeeding_centavos, pkgInsideDefault.rateSucceeding),
+        rate10Days: toPeso(row.default_inside_rate_10_days_centavos, pkgInsideDefault.rate10Days),
+        rate15Plus: toPeso(row.default_inside_rate_15_plus_centavos, pkgInsideDefault.rate15Plus),
       },
       defaultDriverPackage: {
         insidePerDay: toPeso(row.driver_inside_per_day_centavos, driverDefault.insidePerDay),

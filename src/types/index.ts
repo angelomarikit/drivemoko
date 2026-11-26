@@ -78,6 +78,7 @@ export interface Vehicle {
   fuel: FuelType
   pricePerDay: number
   rentalPackage?: RentalPackage
+  rentalPackageInside?: RentalPackage
   listingStatus: ListingStatus
   listingActive: boolean
   ownerId: string | null
@@ -242,7 +243,9 @@ export interface Settings {
   ownersCanBlockAvailability: boolean
   smsSenderName: string
   locations: string[]
+  /** Default outside-province rental tiers. */
   defaultRentalPackage: RentalPackage
+  defaultRentalPackageInside: RentalPackage
   defaultDriverPackage: DriverPackageSettings
   securityDepositAmount: number
 }
@@ -316,6 +319,8 @@ export interface CreateBookingInput {
   rentalType: RentalType
   /** When rentalType is with-driver, inside vs outside driver package. */
   driverZone?: 'inside' | 'outside'
+  /** Tiered vehicle rental package (within vs outside province). */
+  rentalZone?: 'inside' | 'outside'
   addons: BookingAddons
   specialRequest: string
   /** @deprecated Use renterDocuments — kept for mock filenames when files omitted */
@@ -337,6 +342,7 @@ export interface VehicleInput {
   fuel: FuelType
   pricePerDay: number
   rentalPackage?: RentalPackage
+  rentalPackageInside?: RentalPackage
   listingStatus: ListingStatus
   listingActive: boolean
   ownerId: string | null

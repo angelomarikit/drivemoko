@@ -1,7 +1,7 @@
 import type { DemoData, Settings, SmsTemplate } from '@/types'
 import { DEFAULT_DRIVER_PACKAGE } from '@/utils/driverPackage'
 import { COMPANY_COMMISSION_PERCENT, PARTNER_COMMISSION_PERCENT } from '@/utils/partnerShare'
-import { DEFAULT_RENTAL_PACKAGE } from '@/utils/rentalPackage'
+import { DEFAULT_RENTAL_PACKAGE_INSIDE, DEFAULT_RENTAL_PACKAGE_OUTSIDE } from '@/utils/rentalPackage'
 
 export const DEFAULT_SETTINGS: Settings = {
   holdPendingBookings: false,
@@ -21,7 +21,8 @@ export const DEFAULT_SETTINGS: Settings = {
     'Villaverde',
     'Outside Nueva Vizcaya',
   ],
-  defaultRentalPackage: { ...DEFAULT_RENTAL_PACKAGE },
+  defaultRentalPackage: { ...DEFAULT_RENTAL_PACKAGE_OUTSIDE },
+  defaultRentalPackageInside: { ...DEFAULT_RENTAL_PACKAGE_INSIDE },
   defaultDriverPackage: { ...DEFAULT_DRIVER_PACKAGE },
   securityDepositAmount: 3000,
 }

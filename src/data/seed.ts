@@ -12,7 +12,7 @@ import type {
 } from '@/types'
 import { addDays, manilaYmd, rangesOverlap } from '@/utils/dates'
 import { emptyAddons, quotePackage } from '@/utils/pricing'
-import { DEFAULT_RENTAL_PACKAGE, resolveRentalPackage } from '@/utils/rentalPackage'
+import { DEFAULT_RENTAL_PACKAGE_INSIDE, DEFAULT_RENTAL_PACKAGE_OUTSIDE, resolveRentalPackage } from '@/utils/rentalPackage'
 
 function mulberry32(seed: number) {
   let value = seed
@@ -329,7 +329,8 @@ function seedSettings() {
       'Santa Fe',
       'Outside Nueva Vizcaya',
     ],
-    defaultRentalPackage: { ...DEFAULT_RENTAL_PACKAGE },
+    defaultRentalPackage: { ...DEFAULT_RENTAL_PACKAGE_OUTSIDE },
+    defaultRentalPackageInside: { ...DEFAULT_RENTAL_PACKAGE_INSIDE },
   }
 }
 

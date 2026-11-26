@@ -27,7 +27,7 @@ import {
 } from '@/constants/pickup'
 import { quoteDriverFee, type DriverServiceZone } from '@/utils/driverPackage'
 import { emptyAddons, quotePackage } from '@/utils/pricing'
-import { resolveRentalPackage } from '@/utils/rentalPackage'
+import { resolveRentalPackage, resolveRentalPackages } from '@/utils/rentalPackage'
 import { dayAvailability, vehicleDayMap } from '@/utils/vehicleAvailability'
 import { cn } from '@/utils/cn'
 import { findVehicleByParam, isUuid, resolveVehicleForBooking } from '@/utils/vehicleParam'
@@ -89,6 +89,9 @@ export function BookingPage() {
   const [driverZone, setDriverZone] = useState<DriverServiceZone>(
     params.get('driverZone') === 'outside' ? 'outside' : 'inside',
   )
+  const [rentalZone, setRentalZone] = useState<DriverServiceZone>(
+    params.get('rentalZone') === 'outside' ? 'outside' : 'inside',
+  )
   const [request, setRequest] = useState('')
   const [renterDocs, setRenterDocs] = useState<Partial<Record<RenterDocSlot, PickedRenterDoc>>>({})
   const [renterDocError, setRenterDocError] = useState('')
@@ -127,7 +130,8 @@ export function BookingPage() {
     !data.bookings.some(
       (booking) => booking.customerId === session.id && !['cancelled', 'rejected'].includes(booking.status),
     )
-  const rentalRates = resolveRentalPackage(vehicle, data.settings)
+  const rentalPackages = resolveRentalPackages(vehicle, data.settings)
+  const rentalRates = resolveRentalPackage(vehicle, data.settings, rentalZone)
   const pricing = quotePackage(
     rentalRates,
     pickup,
@@ -245,6 +249,7 @@ export function BookingPage() {
       returnTime,
       rentalType,
       driverZone: withDriver ? driverZone : undefined,
+      rentalZone,
       addons: emptyAddons(),
       specialRequest: request,
       renterDocuments: {
@@ -317,7 +322,12 @@ export function BookingPage() {
                     </div>
                   </div>
                   <div className="mt-5 space-y-3">
-                    <RentalPackageRates package={rentalRates} compact />
+                    <RentalPackageRates
+                      packages={rentalPackages}
+                      zone={rentalZone}
+                      onZoneChange={setRentalZone}
+                      compact
+                    />
                     <DriverPackageRates
                       driverZone={driverZone}
                       onDriverZoneChange={setDriverZone}

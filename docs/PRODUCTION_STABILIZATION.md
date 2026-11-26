@@ -10,6 +10,7 @@ In the SQL Editor (or `supabase db push`), apply any migrations not yet on produ
 |-----------|---------|
 | `022_partner_registration.sql` / `022b_partner_finalize_profile_fields.sql` | `admin_finalize_partner_profile`, partner contract columns |
 | `039_ensure_partner_finalize_rpc.sql` | **One-shot fix** if Finalize partner returns **404** on RPC (columns + function) |
+| `040_rental_package_inside_outside.sql` | Within vs outside Vizcaya rental tiers (`rate_inside_*`, `rental_service_zone` on bookings) |
 | `032`–`037` | Booking guest checkout, renter docs RLS, commission |
 | `038_pending_does_not_hold_calendar.sql` | Pending bookings do not block calendar until confirmed |
 

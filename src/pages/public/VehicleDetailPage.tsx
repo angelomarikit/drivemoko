@@ -23,7 +23,11 @@ import { SecurityDepositSummary } from '@/components/rentals/SecurityDepositSumm
 import { buildPickupLocation, type FulfillmentMode } from '@/constants/pickup'
 import { type DriverServiceZone } from '@/utils/driverPackage'
 import { emptyAddons, quotePackage } from '@/utils/pricing'
-import { formatRentalPriceRange, resolveRentalPackage } from '@/utils/rentalPackage'
+import {
+  formatRentalPriceRangeCombined,
+  resolveRentalPackage,
+  resolveRentalPackages,
+} from '@/utils/rentalPackage'
 import { dayAvailability, vehicleDayMap } from '@/utils/vehicleAvailability'
 import { toast } from 'sonner'
 import { findVehicleByParam, isUuid, resolveVehicleForBooking } from '@/utils/vehicleParam'
@@ -63,12 +67,16 @@ export function VehicleDetailPage() {
   const [driverZone, setDriverZone] = useState<DriverServiceZone>(
     params.get('driverZone') === 'outside' ? 'outside' : 'inside',
   )
+  const [rentalZone, setRentalZone] = useState<DriverServiceZone>(
+    params.get('rentalZone') === 'outside' ? 'outside' : 'inside',
+  )
   const rentalType = withDriver ? 'with-driver' : 'self-drive'
   const [ask, setAsk] = useState(false)
   const [availabilityOpen, setAvailabilityOpen] = useState(false)
   const [message, setMessage] = useState('I would like to ask about this vehicle.')
 
-  const rentalRates = vehicle && data ? resolveRentalPackage(vehicle, data.settings) : null
+  const rentalPackages = vehicle && data ? resolveRentalPackages(vehicle, data.settings) : null
+  const rentalRates = vehicle && data ? resolveRentalPackage(vehicle, data.settings, rentalZone) : null
   const pricing =
     rentalRates && data
       ? quotePackage(
@@ -112,6 +120,7 @@ export function VehicleDetailPage() {
       return: ret,
       type: rentalType,
       driverZone,
+      rentalZone,
     })
     navigate(`/book/${vehicle.id}?${next.toString()}`)
   }
@@ -154,15 +163,20 @@ export function VehicleDetailPage() {
                 <button type="button" className="grid h-9 w-9 place-items-center rounded-full border" onClick={() => actions.favorite(vehicle.id)} aria-label="Favorite"><Heart className={`h-4 w-4 ${loved ? 'fill-rose-500 text-rose-500' : ''}`} /></button>
               </div>
             </div>
-            {rentalRates ? (
+            {rentalPackages ? (
               <p className="mt-3 text-2xl font-extrabold text-[#f59e0b]">
-                {formatRentalPriceRange(rentalRates, formatPeso)}{' '}
+                {formatRentalPriceRangeCombined(rentalPackages, formatPeso)}{' '}
                 <span className="text-sm font-semibold text-muted">/ day</span>
               </p>
             ) : null}
-            {rentalRates ? (
+            {rentalPackages ? (
               <div className="mt-3 space-y-3">
-                <RentalPackageRates package={rentalRates} compact />
+                <RentalPackageRates
+                  packages={rentalPackages}
+                  zone={rentalZone}
+                  onZoneChange={setRentalZone}
+                  compact
+                />
                 <DriverPackageRates
                   driverZone={driverZone}
                   onDriverZoneChange={setDriverZone}
@@ -230,7 +244,10 @@ export function VehicleDetailPage() {
             <h3 className="font-bold">About This Vehicle</h3>
             <p className="mt-2 text-muted">
               {vehicle.description}
-              {rentalRates ? ` Rates from ${formatRentalPriceRange(rentalRates, formatPeso)} per day.` : ''} Plate {vehicle.plateNumber}.
+              {rentalPackages
+                ? ` Rates from ${formatRentalPriceRangeCombined(rentalPackages, formatPeso)} per day.`
+                : ''}{' '}
+              Plate {vehicle.plateNumber}.
             </p>
           </Tabs.Content>
           <Tabs.Content value="terms" className="space-y-2 py-4 text-sm text-muted">{RENTAL_TERMS.map((term) => <p key={term}>{term}</p>)}</Tabs.Content>
