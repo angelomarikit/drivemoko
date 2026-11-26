@@ -9,6 +9,7 @@
     "preview": "vite preview",
     "lint": "eslint .",
     "test": "vitest run",
+    "sample:contract": "vitest run src/utils/rentalContract.sample.test.ts",
     "test:e2e": "playwright test"
   },
   "dependencies": {

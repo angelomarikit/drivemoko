@@ -28,6 +28,37 @@ export const RENTAL_TERMS = [
   'Payment terms and security deposits are confirmed when your booking is approved.',
 ]
 
+/** Printed rental agreement (Nehemiah / Cadiang-style). */
+export const RENTAL_AGREEMENT_COMPANY = {
+  legalName: 'NEHEMIAH SALES AND SERVICES CORPORATION',
+  tradeName: 'Drive Moko Car Rentals',
+  address: 'San Nicolas North, Bayombong, Nueva Vizcaya, Philippines',
+  contact: '0926-7764-015',
+  authorizedRepresentative: '',
+  authorizedRepLicenseId: '',
+}
+
+export const RENTAL_AGREEMENT_CLAUSES = [
+  'The security deposit shall be refunded after vehicle inspection, subject to deductions for damages, missing items, traffic violations, tolls, or unpaid charges.',
+  'The vehicle shall be used for personal and lawful purposes only.',
+  'Late returns shall be charged at PHP 300 per hour/day, at the discretion of NEHEMIAH SALES AND SERVICES CORPORATION.',
+  'Vehicle must be returned with the same fuel level. Fuel shortages will be charged accordingly.',
+  'The vehicle is released in good running and roadworthy condition. The Renter agrees to return the vehicle in the same condition, normal wear and tear excepted.',
+  'The vehicle shall not be used for racing, illegal activities, off-road use, or sub-renting.',
+  'Only the Renter or approved drivers authorized by NEHEMIAH SALES AND SERVICES CORPORATION may operate the vehicle (with-driver rentals: the assigned professional driver operates the vehicle).',
+  'The Renter must possess a valid Philippine driver\'s license (or valid foreign license where applicable) when operating the vehicle.',
+  'Vehicle is released with FULL fuel level unless otherwise agreed in writing at handover.',
+  'Any mechanical problem, warning light, or unusual noise must be reported immediately to NEHEMIAH SALES AND SERVICES CORPORATION.',
+  'The Renter shall be fully responsible for any damage, loss, or theft during the rental period.',
+  'In case of accident, damage, or theft, the Renter must immediately notify NEHEMIAH SALES AND SERVICES CORPORATION and the appropriate authorities (PNP / Traffic Office).',
+  'If the vehicle is damaged and the repair is covered by insurance, the Renter agrees to continue paying the daily rental rate for the entire downtime period, including time for insurance processing and repairs.',
+  'If the vehicle is repaired outside of insurance coverage, the Renter shall be responsible for all repair and related costs, and daily rental charges for the full downtime period until the vehicle is fully repaired and ready.',
+  'Downtime rental charges shall be based on the agreed daily rental rate stated in this Agreement. Any insurance deductible, participation fee, or uninsured loss shall be paid by the Renter.',
+  'The Renter is solely responsible for all traffic violations, fines, penalties, towing fees, and legal liabilities incurred during the rental period.',
+  'Drive Moko Car Rentals / NEHEMIAH SALES AND SERVICES CORPORATION reserves the right to terminate this Agreement immediately without prior notice if the Renter violates any term or condition herein.',
+  'This Agreement shall be governed by and construed in accordance with the laws of the Republic of the Philippines.',
+]
+
 export const REQUIREMENTS = [
   { title: 'Valid driver\'s license', body: 'Required for self-drive. With-driver bookings can be arranged without the renter driving.' },
   { title: 'Government-issued ID', body: 'Shown at pickup. Upload of license images will be enabled in a future update.' },

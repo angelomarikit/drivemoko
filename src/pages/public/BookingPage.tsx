@@ -21,6 +21,7 @@ import { BookingReviewStep } from '@/components/rentals/BookingReviewStep'
 import { RentalContractModal } from '@/components/rentals/RentalContractModal'
 import { SecurityDepositSummary } from '@/components/rentals/SecurityDepositSummary'
 import type { RentalContractData } from '@/utils/rentalContract'
+import { buildDestinationRoute, vehicleColorFromName } from '@/utils/rentalContract'
 import {
   buildPickupLocation,
   type FulfillmentMode,
@@ -124,6 +125,8 @@ export function BookingPage() {
 
   const rentalType: RentalType = withDriver ? 'with-driver' : 'self-drive'
   const pickupLocation = buildPickupLocation(fulfillmentMode)
+  const vehicleMakeModel = `${vehicle.brand} ${vehicle.model}`.trim() || vehicle.name
+  const destinationRoute = buildDestinationRoute(pickupLocation, request)
   const isFirstTimeRenter =
     !session ||
     session.role !== 'customer' ||
@@ -444,10 +447,15 @@ export function BookingPage() {
                   onClose={() => setContractOpen(false)}
                   vehicleName={vehicle.name}
                   vehicleMeta={`${vehicle.category} · ${vehicle.seats} Seater · ${vehicle.transmission}`}
+                  vehicleMakeModel={vehicleMakeModel}
+                  vehiclePlate={vehicle.plateNumber || 'TBD'}
+                  vehicleColor={vehicleColorFromName(vehicle.name)}
+                  vehicleFuel={vehicle.fuel}
                   rentalType={rentalType}
                   withDriver={withDriver}
                   driverZoneLabel={withDriver ? (driverZone === 'outside' ? 'Outside province' : 'Inside province') : undefined}
                   pickupLocation={pickupLocation}
+                  destinationRoute={destinationRoute}
                   pickupDate={pickup}
                   returnDate={ret}
                   pickupTime={pickupTime}
@@ -456,16 +464,22 @@ export function BookingPage() {
                   renterEmail={form.getValues('email')}
                   renterPhone={form.getValues('phone')}
                   renterAddress={form.getValues('address')}
+                  renterLicenseId={form.getValues('licenseNumber')}
                   pricing={pricing}
                   specialRequest={request}
                   onSigned={({ signatureDataUrl, signedAtIso, signerName }) => {
                     setContractDraft({
                       vehicleName: vehicle.name,
                       vehicleMeta: `${vehicle.category} · ${vehicle.seats} Seater · ${vehicle.transmission}`,
+                      vehicleMakeModel,
+                      vehiclePlate: vehicle.plateNumber || 'TBD',
+                      vehicleColor: vehicleColorFromName(vehicle.name),
+                      vehicleFuel: vehicle.fuel,
                       rentalType,
                       withDriver,
                       driverZoneLabel: withDriver ? (driverZone === 'outside' ? 'Outside province' : 'Inside province') : undefined,
                       pickupLocation,
+                      destinationRoute,
                       pickupDate: pickup,
                       returnDate: ret,
                       pickupTime,
@@ -474,6 +488,7 @@ export function BookingPage() {
                       renterEmail: form.getValues('email'),
                       renterPhone: form.getValues('phone'),
                       renterAddress: form.getValues('address'),
+                      renterLicenseId: form.getValues('licenseNumber'),
                       pricing,
                       specialRequest: request,
                       signatureDataUrl,

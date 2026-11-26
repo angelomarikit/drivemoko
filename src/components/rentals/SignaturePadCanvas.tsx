@@ -64,7 +64,7 @@ export const SignaturePadCanvas = forwardRef<SignaturePadHandle, Props>(function
       padRef.current?.off()
       padRef.current = new SignaturePad(canvas, {
         penColor: '#0f172a',
-        backgroundColor: 'rgb(248, 250, 252)',
+        backgroundColor: '#ffffff',
         minWidth: 1.2,
         maxWidth: 3.5,
         throttle: 8,
@@ -93,7 +93,7 @@ export const SignaturePadCanvas = forwardRef<SignaturePadHandle, Props>(function
 
   return (
     <div
-      className="h-36 w-full min-h-[144px] bg-slate-50"
+      className="h-36 w-full min-h-[144px] bg-white"
       style={{ touchAction: 'none' }}
       onPointerDown={(event) => event.stopPropagation()}
     >
