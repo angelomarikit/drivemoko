@@ -24,6 +24,20 @@ export interface RegisterPartnerInput {
   profileNotes: string
 }
 
+export type RegisterPartnerResult = {
+  userId: string
+  email: string
+  /** Auth user existed; profile finalized. Form password may not match Auth — reset in Supabase if needed. */
+  recovered?: boolean
+}
+
+export type IncompletePartnerSignup = {
+  id: string
+  email: string
+  full_name: string
+  role: string
+}
+
 export function buildPartnerEmail(localPart: string) {
   const local = localPart.trim().toLowerCase().replace(/[^a-z0-9.-]/g, '')
   if (!local) throw new Error('Enter a valid username for the partner email.')
@@ -47,8 +61,12 @@ function edgeTransportFailure(message: string) {
   return /function|edge function|failed to send|404|not found|cors|network|fetch failed|err_failed/i.test(message)
 }
 
+function isAlreadyRegisteredMessage(message: string) {
+  return /already registered|already exists|user already|email.*already/i.test(message)
+}
+
 function partnerProvisioningError(message: string) {
-  return /already registered|already exists|invalid email|admin only|invalid username/i.test(message)
+  return isAlreadyRegisteredMessage(message) || /invalid email|admin only|invalid username/i.test(message)
 }
 
 function migrationHint(errorMessage: string) {
@@ -56,6 +74,55 @@ function migrationHint(errorMessage: string) {
     return ' Run migration 022_partner_registration.sql (or 022b if 022 was already applied).'
   }
   return ''
+}
+
+export async function lookupProfileIdByEmail(email: string): Promise<string | null> {
+  const supabase = getSupabaseClient()
+  const normalized = email.trim().toLowerCase()
+  const { data, error } = await supabase.from('profiles').select('id').eq('email', normalized).maybeSingle()
+  if (error) throw new Error(error.message)
+  return data?.id ?? null
+}
+
+export async function listIncompletePartnerSignups(): Promise<IncompletePartnerSignup[]> {
+  const supabase = getSupabaseClient()
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('id, email, full_name, role')
+    .ilike('email', `%@${PARTNER_EMAIL_DOMAIN}`)
+    .neq('role', 'partner')
+    .order('created_at', { ascending: false })
+  if (error) throw new Error(error.message)
+  return (data ?? []) as IncompletePartnerSignup[]
+}
+
+export function minimalPartnerInputFromProfile(row: {
+  email: string
+  full_name?: string | null
+  phone?: string | null
+  address?: string | null
+}): RegisterPartnerInput {
+  const email = row.email.trim().toLowerCase()
+  const local = email.includes('@') ? email.split('@')[0]! : email
+  const name = row.full_name?.trim() || local
+  const today = new Date().toISOString().slice(0, 10)
+  return {
+    emailLocal: local,
+    password: generatePartnerPassword(),
+    fullName: name,
+    contactPerson: name,
+    phone: row.phone?.trim() || '0000000000',
+    address: row.address?.trim() || '—',
+    businessName: name,
+    shareRatePercent: 70,
+    vehicleCount: 0,
+    ownershipType: 'owned',
+    vehicleSummary: 'Recovered from incomplete partner signup.',
+    contractReference: `DM-PARTNER-RECOVERY-${local.slice(0, 12)}`,
+    contractNotes: 'Finalized from admin incomplete-partners queue.',
+    contractSignedAt: today,
+    profileNotes: 'Recovered via admin finalize.',
+  }
 }
 
 async function finalizePartnerProfile(
@@ -85,11 +152,25 @@ async function finalizePartnerProfile(
   }
 }
 
+export async function completePartnerProvisioning(
+  input: RegisterPartnerInput,
+  email: string,
+): Promise<RegisterPartnerResult> {
+  const userId = await lookupProfileIdByEmail(email)
+  if (!userId) {
+    throw new Error(
+      'That email exists in Auth but has no profiles row. In Supabase, check Auth → Users and public.profiles for the same id.',
+    )
+  }
+  await finalizePartnerProfile(getSupabaseClient(), userId, input)
+  return { userId, email, recovered: true }
+}
+
 /** Sign-up on a throwaway client so the admin session is not replaced. */
 async function registerPartnerWithoutEdgeFunction(
   input: RegisterPartnerInput,
   email: string,
-): Promise<{ userId: string; email: string }> {
+): Promise<RegisterPartnerResult> {
   if (!supabaseConfigured()) {
     throw new Error('Supabase is not configured.')
   }
@@ -118,8 +199,8 @@ async function registerPartnerWithoutEdgeFunction(
         'Public sign-up is disabled in Supabase. Deploy the create-partner-account Edge Function (recommended) or temporarily enable sign-ups for admin provisioning.',
       )
     }
-    if (/already registered|already exists/i.test(signError.message)) {
-      throw new Error('That @drivemoko.com address is already registered.')
+    if (isAlreadyRegisteredMessage(signError.message)) {
+      return completePartnerProvisioning(input, email)
     }
     throw new Error(signError.message)
   }
@@ -138,7 +219,8 @@ async function registerPartnerWithoutEdgeFunction(
 
 async function registerPartnerViaEdgeFunction(
   input: RegisterPartnerInput,
-): Promise<{ userId: string; email: string }> {
+  email: string,
+): Promise<RegisterPartnerResult> {
   const supabase = getSupabaseClient()
   const { data, error } = await supabase.functions.invoke('create-partner-account', {
     body: { ...input, emailLocal: input.emailLocal },
@@ -153,14 +235,19 @@ async function registerPartnerViaEdgeFunction(
     throw new Error(error.message)
   }
   const payload = data as { ok?: boolean; error?: string; userId?: string; email?: string }
-  if (payload?.error) throw new Error(payload.error + migrationHint(payload.error))
+  if (payload?.error) {
+    if (isAlreadyRegisteredMessage(payload.error)) {
+      return completePartnerProvisioning(input, email)
+    }
+    throw new Error(payload.error + migrationHint(payload.error))
+  }
   if (!payload?.userId || !payload?.email) {
     throw new Error('Partner account was not created. Check Edge Function logs.')
   }
   return { userId: payload.userId, email: payload.email }
 }
 
-export async function registerPartnerAccount(input: RegisterPartnerInput): Promise<{ userId: string; email: string }> {
+export async function registerPartnerAccount(input: RegisterPartnerInput): Promise<RegisterPartnerResult> {
   if (!isSupabaseProvider()) {
     throw new Error('Partner registration requires Supabase.')
   }
@@ -168,10 +255,13 @@ export async function registerPartnerAccount(input: RegisterPartnerInput): Promi
 
   let edgeMessage = ''
   try {
-    return await registerPartnerViaEdgeFunction(input)
+    return await registerPartnerViaEdgeFunction(input, email)
   } catch (edgeError) {
     edgeMessage = edgeError instanceof Error ? edgeError.message : String(edgeError)
     if (partnerProvisioningError(edgeMessage)) {
+      if (isAlreadyRegisteredMessage(edgeMessage)) {
+        return completePartnerProvisioning(input, email)
+      }
       throw edgeError instanceof Error ? edgeError : new Error(edgeMessage)
     }
     const transport =
@@ -186,8 +276,28 @@ export async function registerPartnerAccount(input: RegisterPartnerInput): Promi
     return await registerPartnerWithoutEdgeFunction(input, email)
   } catch (fallbackError) {
     const fb = fallbackError instanceof Error ? fallbackError.message : String(fallbackError)
+    if (isAlreadyRegisteredMessage(fb)) {
+      return completePartnerProvisioning(input, email)
+    }
     throw new Error(
       `Could not reach create-partner-account (${edgeMessage || 'unavailable'}). Sign-up fallback failed: ${fb}`,
     )
   }
+}
+
+export async function finalizeIncompletePartnerSignup(
+  profileId: string,
+  input?: RegisterPartnerInput,
+): Promise<RegisterPartnerResult> {
+  const supabase = getSupabaseClient()
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('id, email, full_name, phone, address')
+    .eq('id', profileId)
+    .maybeSingle()
+  if (error) throw new Error(error.message)
+  if (!data?.email) throw new Error('Profile not found.')
+  const payload = input ?? minimalPartnerInputFromProfile(data)
+  await finalizePartnerProfile(supabase, profileId, payload)
+  return { userId: profileId, email: data.email, recovered: true }
 }

@@ -2,6 +2,7 @@ import { Banknote, CarFront, CalendarCheck, Coins, ExternalLink, UserPlus, Users
 import { useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
+import { IncompletePartnerSignups } from '@/components/partners/IncompletePartnerSignups'
 import { RecordDisbursementModal } from '@/components/partners/RecordDisbursementModal'
 import { StatusBadge } from '@/components/common/StatusBadge'
 import { Panel } from '@/components/layout/DashboardLayout'
@@ -126,6 +127,8 @@ export function PartnersBoard() {
           </Link>
         </div>
       </Panel>
+
+      <IncompletePartnerSignups />
 
       <Panel>
         <div className="flex flex-wrap items-start justify-between gap-3">

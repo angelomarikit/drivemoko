@@ -2,7 +2,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { Copy, KeyRound, UserPlus } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
-import { Link, useSearchParams } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import { friendlyErrorMessage } from '@/utils/friendlyError'
 import { z } from 'zod'
@@ -10,7 +10,8 @@ import { Panel } from '@/components/layout/DashboardLayout'
 import { Button } from '@/components/ui/Button'
 import { DateField, ErrorText, FieldLabel, SelectInput, TextArea, TextInput } from '@/components/ui/Fields'
 import { isMockProvider, isSupabaseProvider } from '@/lib/config'
-import { useDemoActions } from '@/hooks/useDemo'
+import { useDemoActions, useSnapshot } from '@/hooks/useDemo'
+import { useDataVersionStore } from '@/stores/dataVersionStore'
 import {
   buildPartnerEmail,
   generatePartnerPassword,
@@ -45,9 +46,12 @@ type FormValues = z.infer<typeof schema>
 
 export function RegisterPartnerPage() {
   const [searchParams] = useSearchParams()
+  const navigate = useNavigate()
   const actions = useDemoActions()
+  const { refetch } = useSnapshot()
+  const bumpData = useDataVersionStore((state) => state.bump)
   const [busy, setBusy] = useState(false)
-  const [result, setResult] = useState<{ email: string; password: string } | null>(null)
+  const [result, setResult] = useState<{ email: string; password: string; recovered?: boolean } | null>(null)
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues: {
@@ -130,16 +134,34 @@ export function RegisterPartnerPage() {
 
       {result ? (
         <Panel className="border-success/30 bg-emerald-50/40">
-          <h2 className="font-bold text-success">Partner account created</h2>
+          <h2 className="font-bold text-success">
+            {result.recovered ? 'Partner profile finalized' : 'Partner account created'}
+          </h2>
           <p className="mt-2 text-sm">
             <strong>Email:</strong> {result.email}
             <br />
-            <strong>Password:</strong> {result.password}
+            {result.recovered ? (
+              <span className="text-muted">
+                This login already existed. The partner role and contract row are now set. Reset the password in Supabase
+                Auth if they cannot sign in with the password from your last attempt.
+              </span>
+            ) : (
+              <>
+                <strong>Password:</strong> {result.password}
+              </>
+            )}
           </p>
-          <p className="mt-2 text-xs text-muted">Share these credentials securely with the partner. They can change their password after sign-in.</p>
+          {!result.recovered ? (
+            <p className="mt-2 text-xs text-muted">Share these credentials securely with the partner. They can change their password after sign-in.</p>
+          ) : null}
           <div className="mt-3 flex flex-wrap gap-2">
-            <Button type="button" variant="outline" onClick={() => void copyCredentials()}>
-              <Copy className="h-4 w-4" /> Copy login details
+            {!result.recovered ? (
+              <Button type="button" variant="outline" onClick={() => void copyCredentials()}>
+                <Copy className="h-4 w-4" /> Copy login details
+              </Button>
+            ) : null}
+            <Button type="button" variant="soft" onClick={() => navigate('/admin/partners')}>
+              View partner directory
             </Button>
             <Button
               type="button"
@@ -186,7 +208,7 @@ export function RegisterPartnerPage() {
                   toast.success('Demo partner account added.')
                   return
                 }
-                const { email: createdEmail } = await registerPartnerAccount({
+                const provisioned = await registerPartnerAccount({
                   emailLocal: values.emailLocal,
                   password: values.password,
                   fullName: values.fullName,
@@ -208,8 +230,18 @@ export function RegisterPartnerPage() {
                     .filter(Boolean)
                     .join('\n'),
                 })
-                setResult({ email: createdEmail, password: values.password })
-                toast.success('Partner account provisioned.')
+                bumpData()
+                await refetch()
+                setResult({
+                  email: provisioned.email,
+                  password: values.password,
+                  recovered: provisioned.recovered,
+                })
+                toast.success(
+                  provisioned.recovered
+                    ? 'Existing login finalized as partner — check Partner directory.'
+                    : 'Partner account provisioned.',
+                )
               } catch (error) {
                 toast.error(friendlyErrorMessage(error, 'account'))
               } finally {
