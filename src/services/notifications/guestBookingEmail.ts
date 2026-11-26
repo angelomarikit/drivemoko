@@ -1,25 +1,40 @@
 import { getSupabaseClient } from '@/lib/supabase/client'
 import { isSupabaseProvider, supabaseConfigured } from '@/lib/config'
 
-export type GuestBookingLoginEmailInput = {
-  email: string
-  password: string
-  reference: string
-  bookingId: string
-  customerId: string
-  loginUrl: string
+function authRedirectPath(path: string) {
+  return `${window.location.origin}${path}`
 }
 
-export async function sendGuestBookingLoginEmail(input: GuestBookingLoginEmailInput): Promise<boolean> {
+/**
+ * Sends a Supabase Auth email (project SMTP / Supabase mailer) — no Resend edge function.
+ * Prefer magic-link sign-in; fall back to signup confirmation resend when applicable.
+ */
+export async function sendGuestBookingSupabaseEmail(
+  email: string,
+  reference: string,
+): Promise<boolean> {
   if (!isSupabaseProvider() || !supabaseConfigured()) return false
   const supabase = getSupabaseClient()
-  const { data, error } = await supabase.functions.invoke('send-guest-booking-login-email', {
-    body: input,
+  const normalized = email.trim().toLowerCase()
+  const next = encodeURIComponent('/customer/bookings')
+  const emailRedirectTo = authRedirectPath(`/auth/callback?next=${next}`)
+
+  const { error: otpError } = await supabase.auth.signInWithOtp({
+    email: normalized,
+    options: {
+      emailRedirectTo,
+      shouldCreateUser: false,
+    },
   })
-  if (error) {
-    console.warn('send-guest-booking-login-email:', error.message)
-    return false
-  }
-  const payload = data as { ok?: boolean; skipped?: boolean } | null
-  return Boolean(payload?.ok && !payload?.skipped)
+  if (!otpError) return true
+
+  const { error: resendError } = await supabase.auth.resend({
+    type: 'signup',
+    email: normalized,
+    options: { emailRedirectTo },
+  })
+  if (!resendError) return true
+
+  console.warn('Guest booking Supabase email:', otpError.message, resendError.message, reference)
+  return false
 }

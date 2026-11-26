@@ -1,7 +1,7 @@
 import { getSupabaseClient } from '@/lib/supabase/client'
 import { resolveBookingCustomerId, type BookingCustomerResolution } from '@/services/supabase/bookingCustomer'
 import { signOut } from '@/services/auth/authService'
-import { sendGuestBookingLoginEmail } from '@/services/notifications/guestBookingEmail'
+import { sendGuestBookingSupabaseEmail } from '@/services/notifications/guestBookingEmail'
 import { fetchSupabaseSnapshot } from '@/services/supabase/snapshot'
 import { mapBooking, mapVehicle } from '@/services/supabase/mappers'
 import type { Booking, BookingStatus, CreateBookingInput } from '@/types'
@@ -125,14 +125,10 @@ async function finalizeGuestCheckout(
     return booking
   }
 
-  const loginEmailSent = await sendGuestBookingLoginEmail({
-    email: resolution.guestCredentials.email,
-    password: resolution.guestCredentials.password,
-    reference: booking.reference,
-    bookingId: booking.id,
-    customerId: resolution.customerId,
-    loginUrl: `${window.location.origin}/login`,
-  })
+  const loginEmailSent = await sendGuestBookingSupabaseEmail(
+    resolution.guestCredentials.email,
+    booking.reference,
+  )
 
   await signOut()
 

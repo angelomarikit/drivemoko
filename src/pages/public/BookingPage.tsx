@@ -96,6 +96,7 @@ export function BookingPage() {
   const [scheduleError, setScheduleError] = useState('')
   const [contractOpen, setContractOpen] = useState(false)
   const [contractDraft, setContractDraft] = useState<RentalContractData | null>(null)
+  const [confirming, setConfirming] = useState(false)
   const bookingAsGuest = !session || session.role !== 'customer'
 
   const form = useForm<CustomerForm>({
@@ -190,8 +191,6 @@ export function BookingPage() {
     setRenterDocError('')
     setStep(2)
   })
-
-  const [confirming, setConfirming] = useState(false)
 
   const confirm = async () => {
     if (!contractDraft || confirming) return
@@ -350,7 +349,8 @@ export function BookingPage() {
                           {...form.register('password')}
                         />
                         <p className="mt-1 text-xs text-muted">
-                          After you confirm, we&apos;ll email these login details so you can track your booking (you won&apos;t stay signed in on this page).
+                          After you confirm, Supabase will email a sign-in link to this address (you won&apos;t stay logged in on this page). You can also
+                        sign in with this email and the password above.
                         </p>
                       </label>
                       <label className="md:col-span-2">
@@ -515,12 +515,12 @@ export function BookingPage() {
               <p className="mx-auto mt-3 max-w-md text-sm text-muted">
                 {done.checkout.guestLoginEmailSent ? (
                   <>
-                    We emailed login details to <strong>{done.checkout.guestEmail}</strong>. Sign in anytime to track this booking.
+                    Check <strong>{done.checkout.guestEmail}</strong> for a sign-in link from Supabase (or use Login with the password you set).
                   </>
                 ) : (
                   <>
-                    We could not send the email right now. Sign in with <strong>{done.checkout.guestEmail}</strong> and the password you used when
-                    booking.
+                    We could not send a sign-in email right now. Use <strong>Login</strong> with <strong>{done.checkout.guestEmail}</strong> and the
+                    password you used when booking.
                   </>
                 )}
               </p>

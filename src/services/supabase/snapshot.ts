@@ -12,17 +12,18 @@ const partnerProfilesMinimal = `partner_profiles ( share_rate_bps )`
 const partnerProfilesExtended = `partner_profiles (
           share_rate_bps, business_name, vehicle_count, ownership_type,
           vehicle_summary, contract_reference, contract_notes, contact_person, agreement_signed_at,
-          rate_first_day_centavos, rate_succeeding_day_centavos, rate_10_days_centavos, rate_15_plus_centavos,
-          share_first_day_centavos, share_succeeding_day_centavos, share_10_days_centavos, share_15_plus_centavos
+          rate_first_day_centavos, rate_succeeding_day_centavos, rate_10_days_centavos, rate_15_plus_centavos
         )`
 
-function profileSelectNeedsFallback(error: { message?: string; code?: string }) {
+function profileSelectNeedsFallback(error: { message?: string; code?: string; status?: number }) {
   const message = (error.message ?? '').toLowerCase()
   return (
     message.includes('column') ||
     message.includes('partner_profiles') ||
     error.code === '42703' ||
-    error.code === 'PGRST204'
+    error.code === 'PGRST204' ||
+    error.status === 400 ||
+    error.code === '400'
   )
 }
 
@@ -53,7 +54,10 @@ async function fetchProfilesSnapshot(supabase: ReturnType<typeof getSupabaseClie
   const extended = await supabase.from('profiles').select(`${profileColumns}, ${partnerProfilesExtended}`)
   if (!extended.error) return extended
   if (!profileSelectNeedsFallback(extended.error)) return extended
-  return supabase.from('profiles').select(`${profileColumns}, ${partnerProfilesMinimal}`)
+  const minimal = await supabase.from('profiles').select(`${profileColumns}, ${partnerProfilesMinimal}`)
+  if (!minimal.error) return minimal
+  if (!profileSelectNeedsFallback(minimal.error)) return minimal
+  return supabase.from('profiles').select(profileColumns)
 }
 
 export async function fetchSupabaseSnapshot(): Promise<DemoData> {

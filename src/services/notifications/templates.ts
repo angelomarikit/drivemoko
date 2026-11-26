@@ -16,7 +16,7 @@ type TemplateDef = { subject: string; preview: string }
 export const EMAIL_TEMPLATES: Record<NotificationTemplateKey, TemplateDef> = {
   guest_booking_login: {
     subject: 'Drive Moko — your booking login details',
-    preview: 'Sign-in email and password to track your reservation (sent from checkout, not the outbox).',
+    preview: 'Magic link / signup email from Supabase Auth after guest checkout (not the outbox).',
   },
   booking_request_received: {
     subject: 'Drive Moko — booking request received',
