@@ -1,9 +1,7 @@
 import { getSupabaseClient } from '@/lib/supabase/client'
 import { isSupabaseProvider, supabaseConfigured } from '@/lib/config'
 
-function authRedirectPath(path: string) {
-  return `${window.location.origin}${path}`
-}
+import { authRedirectPath } from '@/utils/authRedirect'
 
 /**
  * Sends a Supabase Auth email (project SMTP / Supabase mailer) — no Resend edge function.

@@ -1,10 +1,12 @@
 import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
+import { useAuthRecoveryHashRedirect } from '@/hooks/useAuthRecoveryHashRedirect'
 import { useSyncSupabaseProfileToDemo } from '@/hooks/useSyncSupabaseProfileToDemo'
 import { AppRoutes } from '@/routes/AppRoutes'
 import { useUiStore } from '@/stores/uiStore'
 
 export function App() {
+  useAuthRecoveryHashRedirect()
   useSyncSupabaseProfileToDemo()
   return (
     <>

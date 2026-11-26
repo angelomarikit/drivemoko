@@ -1,4 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod'
+import { ArrowLeft } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { Link, useNavigate } from 'react-router-dom'
@@ -82,6 +83,41 @@ export function AuthCallbackPage() {
 export function ResetPasswordPage() {
   const navigate = useNavigate()
   const [busy, setBusy] = useState(false)
+  const [ready, setReady] = useState(false)
+  const [linkInvalid, setLinkInvalid] = useState(false)
+
+  useEffect(() => {
+    const supabase = getSupabaseClient()
+    let cancelled = false
+
+    const finish = (ok: boolean) => {
+      if (cancelled) return
+      setLinkInvalid(!ok)
+      setReady(true)
+    }
+
+    const { data: subscription } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'PASSWORD_RECOVERY' || (session && event === 'SIGNED_IN')) {
+        finish(true)
+      }
+    })
+
+    void (async () => {
+      await new Promise((r) => window.setTimeout(r, 400))
+      const { data, error } = await supabase.auth.getSession()
+      if (error || !data.session) {
+        finish(false)
+        return
+      }
+      finish(true)
+    })()
+
+    return () => {
+      cancelled = true
+      subscription.subscription.unsubscribe()
+    }
+  }, [])
+
   const form = useForm<{ password: string; confirm: string }>({
     resolver: zodResolver(
       z
@@ -89,6 +125,29 @@ export function ResetPasswordPage() {
         .refine((v) => v.password === v.confirm, { message: 'Passwords do not match', path: ['confirm'] }),
     ),
   })
+  if (!ready) {
+    return (
+      <AuthShell>
+        <p className="text-sm text-muted">Checking your reset link…</p>
+      </AuthShell>
+    )
+  }
+
+  if (linkInvalid) {
+    return (
+      <AuthShell>
+        <h1 className="text-3xl font-extrabold">Reset link expired</h1>
+        <p className="mt-2 text-sm text-muted">
+          Request a new email from the live site (not localhost). If this keeps happening, ask an admin to fix Supabase
+          Auth URL settings.
+        </p>
+        <Link to="/forgot-password" className="mt-4 inline-block font-bold">
+          Send reset email again
+        </Link>
+      </AuthShell>
+    )
+  }
+
   return (
     <AuthShell>
       <h1 className="text-3xl font-extrabold">Set new password</h1>
@@ -479,7 +538,16 @@ function AuthShell({ children, demo }: { children: React.ReactNode; demo?: boole
       <div className="relative hidden overflow-hidden bg-navy text-white lg:block">
         <img src="/vehicles/mountains.jpg" alt="" className="absolute inset-0 h-full w-full object-cover opacity-40" />
         <div className="relative flex h-full flex-col justify-between p-10">
-          <BrandLockup />
+          <div>
+            <BrandLockup />
+            <Link
+              to="/"
+              className="mt-6 inline-flex items-center gap-2 text-sm font-semibold text-white/90 transition hover:text-gold"
+            >
+              <ArrowLeft className="h-4 w-4" aria-hidden />
+              Go back to home
+            </Link>
+          </div>
           <div>
             <p className="text-4xl font-black italic">
               Susi Mo Sa <span className="text-gold">Masayang Biyahe!</span>
@@ -492,7 +560,14 @@ function AuthShell({ children, demo }: { children: React.ReactNode; demo?: boole
           </div>
         </div>
       </div>
-      <div className="flex items-center justify-center bg-canvas px-4 py-10">
+      <div className="flex flex-col items-center justify-center bg-canvas px-4 py-10">
+        <Link
+          to="/"
+          className="mb-4 inline-flex items-center gap-2 text-sm font-bold text-navy hover:text-gold lg:hidden"
+        >
+          <ArrowLeft className="h-4 w-4" aria-hidden />
+          Go back to home
+        </Link>
         <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-sm">{children}</div>
       </div>
     </div>

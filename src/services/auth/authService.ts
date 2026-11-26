@@ -1,6 +1,7 @@
 import { getSupabaseClient } from '@/lib/supabase/client'
 import { useAuthSessionStore } from '@/stores/authSessionStore'
 import type { Role, User } from '@/types'
+import { authRedirectPath } from '@/utils/authRedirect'
 
 type ProfileRow = {
   id: string
@@ -104,10 +105,6 @@ export interface RegisterCustomerInput {
   phone: string
   address: string
   password: string
-}
-
-function authRedirectPath(path: string) {
-  return `${window.location.origin}${path}`
 }
 
 export async function registerCustomer(input: RegisterCustomerInput) {

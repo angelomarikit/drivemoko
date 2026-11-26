@@ -45,6 +45,23 @@ Push to the branch Vercel builds and deploy, or trigger a redeploy. Env vars mus
 - `VITE_SUPABASE_URL`
 - `VITE_SUPABASE_ANON_KEY`
 - App provider set to Supabase (per project config)
+- Optional: `VITE_PUBLIC_SITE_URL` = your production origin (same as Supabase **Site URL**)
+
+### Auth: forgot-password lands on `localhost:3000` / connection refused
+
+Supabase is using an old **Site URL** (`http://localhost:3000`). Reset emails then redirect there instead of Vercel.
+
+**Fix in Supabase → Authentication → URL Configuration**
+
+1. **Site URL:** `https://drivemoko.vercel.app` (or your custom domain)
+2. **Redirect URLs** (add each line):
+   - `https://drivemoko.vercel.app/auth/reset-password`
+   - `https://drivemoko.vercel.app/auth/callback`
+   - `http://localhost:5173/auth/reset-password`
+   - `http://localhost:5173/auth/callback`
+3. Save, then use **Forgot password** again on production (old emails may still point at localhost).
+
+The app also forwards recovery tokens from `/` to `/auth/reset-password` when the link hits the live site with a hash.
 
 ## 4. Fix orphaned partner logins
 
