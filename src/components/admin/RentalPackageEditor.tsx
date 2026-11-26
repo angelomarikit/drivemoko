@@ -14,6 +14,9 @@ type Props = {
   saveLabel?: string
   saving?: boolean
   showPreview?: boolean
+  /** Shown above the tier fields (e.g. Within Nueva Vizcaya). */
+  sectionTitle?: string
+  sectionHint?: string
 }
 
 /** Single-zone editor (legacy). */
@@ -24,12 +27,16 @@ export function RentalPackageEditor({
   saveLabel = 'Save package',
   saving,
   showPreview = true,
+  sectionTitle,
+  sectionHint,
 }: Props) {
   const set = (key: keyof RentalPackage, raw: string) => {
     onChange({ ...value, [key]: Number(raw) || 0 })
   }
   return (
     <div className="space-y-3">
+      {sectionTitle ? <h3 className="text-sm font-bold text-navy">{sectionTitle}</h3> : null}
+      {sectionHint ? <p className="text-xs text-muted">{sectionHint}</p> : null}
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <label>
           <FieldLabel>1 day</FieldLabel>

@@ -55,16 +55,14 @@ import { earningsTotal, scopedBookings, scopedVehicles, shareAmount, statusCount
 import { formatPeso } from '@/utils/money'
 import { RentalOpsPanel } from '@/components/rentals/RentalOpsPanel'
 import { DriverPackageEditor } from '@/components/admin/DriverPackageEditor'
-import { RentalPackageEditor, RentalPackagesByZoneEditor } from '@/components/admin/RentalPackageEditor'
+import { RentalPackageEditor } from '@/components/admin/RentalPackageEditor'
 import { RentalPackageRates } from '@/components/rentals/RentalPackageRates'
 import { emptyAddons } from '@/utils/pricing'
 import { COMPANY_COMMISSION_PERCENT, PARTNER_COMMISSION_PERCENT } from '@/utils/partnerShare'
 import {
   DEFAULT_RENTAL_PACKAGE_INSIDE,
-  DEFAULT_RENTAL_PACKAGE_OUTSIDE,
   resolveRentalPackage,
   resolveRentalPackages,
-  type RentalPackagesByZone,
 } from '@/utils/rentalPackage'
 import type { PartnerAdminInput, RentalPackage } from '@/types'
 
@@ -1613,13 +1611,10 @@ export function RentalPackagesBoard() {
   const { data } = useSnapshot()
   const session = useSession()
   const actions = useDemoActions()
-  const [defaultPkgs, setDefaultPkgs] = useState<RentalPackagesByZone>({
-    inside: { ...DEFAULT_RENTAL_PACKAGE_INSIDE },
-    outside: { ...DEFAULT_RENTAL_PACKAGE_OUTSIDE },
-  })
+  const [defaultInsidePkg, setDefaultInsidePkg] = useState<RentalPackage>({ ...DEFAULT_RENTAL_PACKAGE_INSIDE })
   const [defaultDriver, setDefaultDriver] = useState(() => data?.settings.defaultDriverPackage ?? { insidePerDay: 1000, outsideFirstDay: 3000, outsideSucceeding: 1000 })
   const [securityDeposit, setSecurityDeposit] = useState(() => data?.settings.securityDepositAmount ?? 3000)
-  const [byVehicle, setByVehicle] = useState<Record<string, RentalPackagesByZone>>({})
+  const [byVehicleInside, setByVehicleInside] = useState<Record<string, RentalPackage>>({})
   const [editingId, setEditingId] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
@@ -1627,17 +1622,13 @@ export function RentalPackagesBoard() {
     if (!data) return
     setDefaultDriver({ ...data.settings.defaultDriverPackage })
     setSecurityDeposit(data.settings.securityDepositAmount)
-    setDefaultPkgs({
-      inside: { ...data.settings.defaultRentalPackageInside },
-      outside: { ...data.settings.defaultRentalPackage },
-    })
-    const next: Record<string, RentalPackagesByZone> = {}
+    setDefaultInsidePkg({ ...data.settings.defaultRentalPackageInside })
+    const next: Record<string, RentalPackage> = {}
     for (const vehicle of data.vehicles) {
-      next[vehicle.id] = resolveRentalPackages(vehicle, data.settings)
+      next[vehicle.id] = resolveRentalPackages(vehicle, data.settings).inside
     }
-    setByVehicle(next)
+    setByVehicleInside(next)
   }, [
-    data?.settings.defaultRentalPackage,
     data?.settings.defaultRentalPackageInside,
     data?.settings.defaultDriverPackage,
     data?.settings.securityDepositAmount,
@@ -1654,27 +1645,27 @@ export function RentalPackagesBoard() {
       <Panel>
         <h1 className="text-xl font-extrabold">Rental packages</h1>
         <p className="mt-1 text-sm text-muted">
-          Set the site-wide default package and override rates per vehicle. Customers see these tiers when booking.
+          Set within-province rental tiers (Inside Nueva Vizcaya). Outside-province rates are set when you add or edit a
+          vehicle.
         </p>
-        <h2 className="mt-4 text-sm font-bold text-navy">Default rental packages</h2>
-        <p className="text-xs text-muted">Used when a vehicle has no override for that zone. Outside tiers use the existing rate_* columns.</p>
+        <h2 className="mt-4 text-sm font-bold text-navy">Default package (Inside Nueva Vizcaya)</h2>
+        <p className="text-xs text-muted">Used when a vehicle has no inside override (rate_inside_*).</p>
         <div className="mt-3">
-          <RentalPackagesByZoneEditor
-            value={defaultPkgs}
-            onChange={setDefaultPkgs}
+          <RentalPackageEditor
+            value={defaultInsidePkg}
+            onChange={setDefaultInsidePkg}
+            sectionTitle="Within Nueva Vizcaya"
+            sectionHint="Shown on booking when renters choose Inside Nueva Vizcaya."
             saving={busy}
             onSave={async () => {
               setBusy(true)
               try {
-                await actions.saveSettings({
-                  defaultRentalPackage: defaultPkgs.outside,
-                  defaultRentalPackageInside: defaultPkgs.inside,
-                })
+                await actions.saveSettings({ defaultRentalPackageInside: defaultInsidePkg })
               } finally {
                 setBusy(false)
               }
             }}
-            saveLabel="Save default packages"
+            saveLabel="Save default inside package"
           />
         </div>
       </Panel>
@@ -1726,7 +1717,8 @@ export function RentalPackagesBoard() {
         </div>
       </Panel>
       <Panel>
-        <h2 className="font-bold">Packages by vehicle</h2>
+        <h2 className="font-bold">Inside packages by vehicle</h2>
+        <p className="mt-1 text-xs text-muted">Outside tiers remain on each vehicle record (Add / Edit vehicle).</p>
         <div className="mt-3 overflow-x-auto">
           <table className="w-full min-w-[720px] text-left text-sm">
             <thead className="text-xs text-muted">
@@ -1741,8 +1733,8 @@ export function RentalPackagesBoard() {
             </thead>
             <tbody>
               {vehicles.map((vehicle) => {
-                const pkg = byVehicle[vehicle.id] ?? resolveRentalPackages(vehicle, data.settings)
-                const outside = pkg.outside
+                const inside =
+                  byVehicleInside[vehicle.id] ?? resolveRentalPackages(vehicle, data.settings).inside
                 return (
                   <tr key={vehicle.id} className="border-t align-top">
                     <td className="py-3 font-semibold">
@@ -1750,12 +1742,12 @@ export function RentalPackagesBoard() {
                         <VehicleImage src={vehicle.images[0]} alt="" className="h-10 w-14 rounded-lg" />
                         {vehicle.name}
                       </span>
-                      <span className="mt-1 block text-xs text-muted">Outside rates shown</span>
+                      <span className="mt-1 block text-xs text-muted">Within Nueva Vizcaya</span>
                     </td>
-                    <td className="py-3">{formatPeso(outside.rateFirstDay)}</td>
-                    <td className="py-3">{formatPeso(outside.rateSucceeding)}</td>
-                    <td className="py-3">{formatPeso(outside.rate10Days)}</td>
-                    <td className="py-3">{formatPeso(outside.rate15Plus)}</td>
+                    <td className="py-3">{formatPeso(inside.rateFirstDay)}</td>
+                    <td className="py-3">{formatPeso(inside.rateSucceeding)}</td>
+                    <td className="py-3">{formatPeso(inside.rate10Days)}</td>
+                    <td className="py-3">{formatPeso(inside.rate15Plus)}</td>
                     <td className="py-3">
                       <Button type="button" variant="outline" className="text-xs" onClick={() => setEditingId(vehicle.id)}>
                         Edit
@@ -1768,27 +1760,25 @@ export function RentalPackagesBoard() {
           </table>
         </div>
       </Panel>
-      <Modal open={!!editingId} onClose={() => setEditingId(null)} title="Edit vehicle package" wide>
-        {editingId && byVehicle[editingId] ? (
-          <RentalPackagesByZoneEditor
-            value={byVehicle[editingId]}
-            onChange={(next) => setByVehicle((prev) => ({ ...prev, [editingId]: next }))}
+      <Modal open={!!editingId} onClose={() => setEditingId(null)} title="Edit vehicle package (Inside Nueva Vizcaya)" wide>
+        {editingId && byVehicleInside[editingId] ? (
+          <RentalPackageEditor
+            value={byVehicleInside[editingId]}
+            onChange={(next) => setByVehicleInside((prev) => ({ ...prev, [editingId]: next }))}
+            sectionTitle="Within Nueva Vizcaya"
+            sectionHint="Does not change outside-province rates on the vehicle record."
             saving={busy}
             onSave={async () => {
-              const pkg = byVehicle[editingId]
+              const pkg = byVehicleInside[editingId]
               setBusy(true)
               try {
-                await actions.updateVehicle(editingId, {
-                  rentalPackage: pkg.outside,
-                  rentalPackageInside: pkg.inside,
-                  pricePerDay: pkg.outside.rateFirstDay,
-                })
+                await actions.updateVehicle(editingId, { rentalPackageInside: pkg })
                 setEditingId(null)
               } finally {
                 setBusy(false)
               }
             }}
-            saveLabel="Save vehicle package"
+            saveLabel="Save inside package"
           />
         ) : null}
       </Modal>

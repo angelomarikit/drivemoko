@@ -2,7 +2,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { ArrowLeft } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, NavLink, useNavigate } from 'react-router-dom'
 import { z } from 'zod'
 import { BrandLockup } from '@/components/layout/PublicLayout'
 import { Button } from '@/components/ui/Button'
@@ -22,6 +22,16 @@ import {
 import { getSupabaseClient } from '@/lib/supabase/client'
 import { homeForRole } from '@/utils/bookingRules'
 import { toast } from 'sonner'
+import { cn } from '@/utils/cn'
+
+const authNavLinks = [
+  { to: '/', label: 'Home', end: true },
+  { to: '/cars', label: 'Available Cars' },
+  { to: '/how-it-works', label: 'How It Works' },
+  { to: '/become-a-partner', label: 'Become a Partner' },
+  { to: '/about', label: 'About Us' },
+  { to: '/contact', label: 'Contact' },
+] as const
 
 const registerSchema = z
   .object({
@@ -538,11 +548,33 @@ function AuthShell({ children, demo }: { children: React.ReactNode; demo?: boole
       <div className="relative hidden overflow-hidden bg-navy text-white lg:block">
         <img src="/vehicles/mountains.jpg" alt="" className="absolute inset-0 h-full w-full object-cover opacity-40" />
         <div className="relative flex h-full flex-col justify-between p-10">
-          <div>
-            <BrandLockup />
+          <div className="space-y-6">
+            <div className="flex items-start justify-between gap-4">
+              <BrandLockup />
+              <nav
+                className="flex max-w-[62%] flex-wrap justify-end gap-x-4 gap-y-2 text-right text-sm"
+                aria-label="Site navigation"
+              >
+                {authNavLinks.map((link) => (
+                  <NavLink
+                    key={link.to}
+                    to={link.to}
+                    end={link.end}
+                    className={({ isActive }) =>
+                      cn(
+                        'font-semibold text-white/85 transition hover:text-gold',
+                        isActive && 'text-gold underline decoration-gold decoration-2 underline-offset-4',
+                      )
+                    }
+                  >
+                    {link.label}
+                  </NavLink>
+                ))}
+              </nav>
+            </div>
             <Link
               to="/"
-              className="mt-6 inline-flex items-center gap-2 text-sm font-semibold text-white/90 transition hover:text-gold"
+              className="inline-flex items-center gap-2 text-sm font-semibold text-white/80 transition hover:text-gold"
             >
               <ArrowLeft className="h-4 w-4" aria-hidden />
               Go back to home
@@ -561,6 +593,21 @@ function AuthShell({ children, demo }: { children: React.ReactNode; demo?: boole
         </div>
       </div>
       <div className="flex flex-col items-center justify-center bg-canvas px-4 py-10">
+        <nav
+          className="mb-3 flex max-w-md flex-wrap justify-center gap-x-3 gap-y-2 text-center text-xs font-semibold text-navy lg:hidden"
+          aria-label="Site navigation"
+        >
+          {authNavLinks.map((link) => (
+            <NavLink
+              key={link.to}
+              to={link.to}
+              end={link.end}
+              className={({ isActive }) => cn('hover:text-gold', isActive && 'text-gold')}
+            >
+              {link.label}
+            </NavLink>
+          ))}
+        </nav>
         <Link
           to="/"
           className="mb-4 inline-flex items-center gap-2 text-sm font-bold text-navy hover:text-gold lg:hidden"
