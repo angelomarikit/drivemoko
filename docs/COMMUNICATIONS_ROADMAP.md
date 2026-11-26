@@ -11,6 +11,19 @@ Decisions as of Phase 3 (production path).
 
 Do **not** remove SMS screens, routes, or template shapes from the codebase.
 
+## Guest checkout login email
+
+After a **new guest** completes public booking confirm, the app:
+
+1. Uses a short-lived customer JWT to save the booking, then **signs out** (no auto-login in the navbar).
+2. Calls Edge Function `send-guest-booking-login-email` with the customer’s **email, password, booking reference**, and login URL (password is **not** stored in `notification_outbox`).
+
+**Deploy:** `supabase functions deploy send-guest-booking-login-email`
+
+**Secrets:** `RESEND_API_KEY`, optional `BOOKING_FROM_EMAIL` (default `Drive Moko <bookings@drivemoko.com>`).
+
+If Resend is not configured, the success screen still shows the booking reference and tells the customer to use the password they chose on the form.
+
 ## Email verification — not in Phase 2
 
 Phase 2 auth is **email + password** with **immediate session** when Supabase allows it.

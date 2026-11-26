@@ -1,4 +1,5 @@
 export type NotificationTemplateKey =
+  | 'guest_booking_login'
   | 'booking_request_received'
   | 'booking_confirmed'
   | 'booking_rejected'
@@ -13,6 +14,10 @@ export type NotificationTemplateKey =
 type TemplateDef = { subject: string; preview: string }
 
 export const EMAIL_TEMPLATES: Record<NotificationTemplateKey, TemplateDef> = {
+  guest_booking_login: {
+    subject: 'Drive Moko — your booking login details',
+    preview: 'Sign-in email and password to track your reservation (sent from checkout, not the outbox).',
+  },
   booking_request_received: {
     subject: 'Drive Moko — booking request received',
     preview: 'We received your reservation request. Our team will review it shortly.',

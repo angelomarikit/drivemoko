@@ -1,5 +1,7 @@
 import { getSupabaseClient } from '@/lib/supabase/client'
-import { resolveBookingCustomerId } from '@/services/supabase/bookingCustomer'
+import { resolveBookingCustomerId, type BookingCustomerResolution } from '@/services/supabase/bookingCustomer'
+import { signOut } from '@/services/auth/authService'
+import { sendGuestBookingLoginEmail } from '@/services/notifications/guestBookingEmail'
 import { fetchSupabaseSnapshot } from '@/services/supabase/snapshot'
 import { mapBooking, mapVehicle } from '@/services/supabase/mappers'
 import type { Booking, BookingStatus, CreateBookingInput } from '@/types'
@@ -71,6 +73,104 @@ function isRenterDocColumnMissing(message: string) {
     lower.includes('proof_of_billing_storage_path') ||
     (lower.includes('column') && lower.includes('does not exist'))
   )
+}
+
+function isContractColumnMissing(message: string) {
+  const lower = message.toLowerCase()
+  return (
+    (lower.includes('contract_storage_path') ||
+      lower.includes('contract_signed_at') ||
+      lower.includes('contract_signer_name')) &&
+    lower.includes('column')
+  )
+}
+
+/** Booking row already saved — docs/contract/refresh must not block success for the customer. */
+function isNonFatalPostInsertError(message: string) {
+  if (isStorageAlreadyStored(message) || isRenterDocColumnMissing(message) || isContractColumnMissing(message)) {
+    return true
+  }
+  const lower = message.toLowerCase()
+  return (
+    lower.includes('row-level security') ||
+    lower.includes('permission denied') ||
+    lower.includes('42501') ||
+    lower.includes('violates row-level security')
+  )
+}
+
+async function reloadBookingRow(
+  supabase: ReturnType<typeof getSupabaseClient>,
+  bookingId: string,
+  fallback: Record<string, unknown>,
+) {
+  const { data } = await supabase.from('bookings').select('*').eq('id', bookingId).maybeSingle()
+  return (data ?? fallback) as Parameters<typeof mapBooking>[0]
+}
+
+async function finalizeGuestCheckout(
+  resolution: BookingCustomerResolution,
+  booking: Booking,
+  customerEmail?: string,
+): Promise<Booking> {
+  await enqueueBookingStatusEmails({
+    id: booking.id,
+    reference: booking.reference,
+    status: 'pending',
+    customerId: booking.customerId,
+    customerEmail: customerEmail?.trim() || resolution.guestCredentials?.email,
+  })
+
+  if (resolution.mode !== 'new_guest' || !resolution.guestCredentials) {
+    return booking
+  }
+
+  const loginEmailSent = await sendGuestBookingLoginEmail({
+    email: resolution.guestCredentials.email,
+    password: resolution.guestCredentials.password,
+    reference: booking.reference,
+    bookingId: booking.id,
+    customerId: resolution.customerId,
+    loginUrl: `${window.location.origin}/login`,
+  })
+
+  await signOut()
+
+  return {
+    ...booking,
+    checkout: {
+      guestLoginEmailSent: loginEmailSent,
+      guestEmail: resolution.guestCredentials.email,
+    },
+  }
+}
+
+async function attachPostInsertExtras(
+  supabase: ReturnType<typeof getSupabaseClient>,
+  row: { id: string; reference: string; customer_id?: string },
+  input: CreateBookingInput,
+) {
+  try {
+    await attachRenterDocuments(supabase, row.id, input)
+  } catch (attachError) {
+    const message = attachError instanceof Error ? attachError.message : ''
+    if (!isNonFatalPostInsertError(message)) throw attachError
+  }
+
+  if (!input.contract) return
+
+  try {
+    const contractMeta = await attachBookingContract(supabase, row, input.contract)
+    Object.assign(row, {
+      id: contractMeta.id,
+      contract_storage_path: contractMeta.contract_storage_path,
+      contract_signed_at: contractMeta.contract_signed_at,
+      contract_signer_name: contractMeta.contract_signer_name,
+    })
+  } catch (attachError) {
+    const message = attachError instanceof Error ? attachError.message : ''
+    if (!isNonFatalPostInsertError(message)) throw attachError
+  }
 }
 
 async function findPendingBookingInDatabase(
@@ -198,7 +298,8 @@ async function attachBookingContract(
 }
 
 export async function createBooking(input: CreateBookingInput): Promise<Booking> {
-  const customerId = await resolveBookingCustomerId(input.customerId, input.customer)
+  const resolution = await resolveBookingCustomerId(input.customerId, input.customer)
+  const customerId = resolution.customerId
 
   const snap = await fetchSupabaseSnapshot()
   const supabase = getSupabaseClient()
@@ -256,7 +357,8 @@ export async function createBooking(input: CreateBookingInput): Promise<Booking>
   )
 
   if (existingPending) {
-    return resumePendingBooking(supabase, existingPending, input, pricing, snap)
+    const resumed = await resumePendingBooking(supabase, existingPending, input, pricing, snap)
+    return finalizeGuestCheckout(resolution, resumed, input.customer?.email)
   }
 
   const { data: reference, error: refError } = await supabase.rpc('next_booking_reference')
@@ -300,7 +402,8 @@ export async function createBooking(input: CreateBookingInput): Promise<Booking>
     if (overlap) {
       const sameCustomer = await findLatestCustomerPendingOnVehicle(supabase, customerId, vehicleId)
       if (sameCustomer) {
-        return resumePendingBooking(supabase, sameCustomer, input, pricing, snap)
+        const resumed = await resumePendingBooking(supabase, sameCustomer, input, pricing, snap)
+        return finalizeGuestCheckout(resolution, resumed, input.customer?.email)
       }
       throw new Error('Those dates are no longer available for this vehicle. Pick different dates and try again.')
     }
@@ -310,31 +413,10 @@ export async function createBooking(input: CreateBookingInput): Promise<Booking>
     throw new Error(error.message)
   }
 
-  try {
-    await attachRenterDocuments(supabase, row.id, input)
-  } catch (attachError) {
-    const message = attachError instanceof Error ? attachError.message : ''
-    if (!isStorageAlreadyStored(message) && !isRenterDocColumnMissing(message)) throw attachError
-  }
+  await attachPostInsertExtras(supabase, row, input)
+  const bookingRow = await reloadBookingRow(supabase, row.id, row)
 
-  if (input.contract) {
-    try {
-      const contractMeta = await attachBookingContract(supabase, row, input.contract)
-      row.id = contractMeta.id
-      row.contract_storage_path = contractMeta.contract_storage_path
-      row.contract_signed_at = contractMeta.contract_signed_at
-      row.contract_signer_name = contractMeta.contract_signer_name
-    } catch (attachError) {
-      const message = attachError instanceof Error ? attachError.message : ''
-      if (!isStorageAlreadyStored(message)) throw attachError
-    }
-  }
-
-  const { data: refreshed, error: refreshError } = await supabase.from('bookings').select('*').eq('id', row.id).single()
-  if (refreshError) throw new Error(refreshError.message)
-  const bookingRow = (refreshed ?? row) as Parameters<typeof mapBooking>[0]
-
-  return mapBooking(bookingRow, [
+  const booking = mapBooking(bookingRow, [
     {
       booking_id: row.id,
       previous_status: null,
@@ -345,6 +427,7 @@ export async function createBooking(input: CreateBookingInput): Promise<Booking>
       profiles: { full_name: input.customer?.name ?? 'Customer' },
     },
   ])
+  return finalizeGuestCheckout(resolution, booking, input.customer?.email)
 }
 
 async function resumePendingBooking(
@@ -384,29 +467,8 @@ async function resumePendingBooking(
     throw new Error('Could not update your pending booking. Refresh and try again.')
   }
 
-  try {
-    await attachRenterDocuments(supabase, row.id, input)
-  } catch (attachError) {
-    const message = attachError instanceof Error ? attachError.message : ''
-    if (!isStorageAlreadyStored(message) && !isRenterDocColumnMissing(message)) throw attachError
-  }
-
-  if (input.contract) {
-    try {
-      const contractMeta = await attachBookingContract(supabase, row, input.contract)
-      row.id = contractMeta.id
-      row.contract_storage_path = contractMeta.contract_storage_path
-      row.contract_signed_at = contractMeta.contract_signed_at
-      row.contract_signer_name = contractMeta.contract_signer_name
-    } catch (attachError) {
-      const message = attachError instanceof Error ? attachError.message : ''
-      if (!isStorageAlreadyStored(message)) throw attachError
-    }
-  }
-
-  const { data: refreshed, error: refreshError } = await supabase.from('bookings').select('*').eq('id', row.id).single()
-  if (refreshError) throw new Error(refreshError.message)
-  const bookingRow = (refreshed ?? row) as Parameters<typeof mapBooking>[0]
+  await attachPostInsertExtras(supabase, row, input)
+  const bookingRow = await reloadBookingRow(supabase, row.id, row)
 
   const prior = snap.bookings.find((item) => item.id === row.id)
   const booking = mapBooking(bookingRow, [])

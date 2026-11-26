@@ -3,6 +3,15 @@ import { fetchProfile } from '@/services/auth/authService'
 import { useAuthSessionStore } from '@/stores/authSessionStore'
 import type { CustomerDraft } from '@/types'
 
+export type BookingCustomerMode = 'existing_customer' | 'new_guest'
+
+export type BookingCustomerResolution = {
+  customerId: string
+  mode: BookingCustomerMode
+  /** Present only for new_guest — used to send login email before sign-out. */
+  guestCredentials?: { email: string; password: string }
+}
+
 async function syncCustomerProfile(customerId: string, customer: CustomerDraft) {
   const supabase = getSupabaseClient()
   const { data: authData } = await supabase.auth.getSession()
@@ -31,14 +40,15 @@ async function activateCustomerSession(customerId: string, customer?: CustomerDr
 export async function resolveBookingCustomerId(
   customerId: string | undefined,
   customer: CustomerDraft | undefined,
-): Promise<string> {
+): Promise<BookingCustomerResolution> {
   const supabase = getSupabaseClient()
   await supabase.auth.refreshSession()
   const { data: authData } = await supabase.auth.getSession()
   const authUser = authData.session?.user
 
   if (customerId && authUser?.id === customerId) {
-    return activateCustomerSession(customerId, customer)
+    await activateCustomerSession(customerId, customer)
+    return { customerId, mode: 'existing_customer' }
   }
 
   if (customerId && !authUser) {
@@ -48,7 +58,8 @@ export async function resolveBookingCustomerId(
   if (authUser) {
     const profile = await fetchProfile(authUser.id)
     if (profile?.role === 'customer') {
-      return activateCustomerSession(profile.id, customer)
+      await activateCustomerSession(profile.id, customer)
+      return { customerId: profile.id, mode: 'existing_customer' }
     }
     if (profile) {
       throw new Error(
@@ -99,5 +110,10 @@ export async function resolveBookingCustomerId(
   }
 
   await syncCustomerProfile(data.user.id, customer)
-  return activateCustomerSession(data.user.id, customer)
+
+  return {
+    customerId: data.user.id,
+    mode: 'new_guest',
+    guestCredentials: { email, password },
+  }
 }

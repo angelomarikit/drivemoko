@@ -349,7 +349,9 @@ export function BookingPage() {
                           placeholder="At least 8 characters"
                           {...form.register('password')}
                         />
-                        <p className="mt-1 text-xs text-muted">Use this email and password to sign in and track your bookings later.</p>
+                        <p className="mt-1 text-xs text-muted">
+                          After you confirm, we&apos;ll email these login details so you can track your booking (you won&apos;t stay signed in on this page).
+                        </p>
                       </label>
                       <label className="md:col-span-2">
                         <FieldLabel required>Confirm password</FieldLabel>
@@ -509,6 +511,20 @@ export function BookingPage() {
               <p className="font-bold">{formatPeso(done.pricing.total)}</p>
             </div>
             <p className="mt-3 text-sm text-muted">Our team will confirm availability. Payment is recorded separately after approval.</p>
+            {done.checkout?.guestEmail ? (
+              <p className="mx-auto mt-3 max-w-md text-sm text-muted">
+                {done.checkout.guestLoginEmailSent ? (
+                  <>
+                    We emailed login details to <strong>{done.checkout.guestEmail}</strong>. Sign in anytime to track this booking.
+                  </>
+                ) : (
+                  <>
+                    We could not send the email right now. Sign in with <strong>{done.checkout.guestEmail}</strong> and the password you used when
+                    booking.
+                  </>
+                )}
+              </p>
+            ) : null}
             <div className="mt-5 flex flex-wrap justify-center gap-2">
               <Button variant="outline" onClick={() => navigate('/cars')}>Browse cars</Button>
               {session?.role === 'customer' ? (

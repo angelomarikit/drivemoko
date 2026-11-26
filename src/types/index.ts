@@ -145,6 +145,8 @@ export interface Booking {
   contractStoragePath?: string
   contractSignedAt?: string
   contractSignerName?: string
+  /** Set on public guest checkout only (login email + no auto session). */
+  checkout?: { guestLoginEmailSent?: boolean; guestEmail?: string }
 }
 
 export interface Payment {
