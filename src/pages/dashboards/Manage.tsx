@@ -18,6 +18,7 @@ import { toast } from 'sonner'
 import { Bar, BarChart, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { z } from 'zod'
 import { BookingContractDownload } from '@/components/bookings/BookingContractDownload'
+import { BookingRenterDocuments } from '@/components/bookings/BookingRenterDocuments'
 import { StatusBadge } from '@/components/common/StatusBadge'
 import { VehicleImage } from '@/components/common/VehicleImage'
 import { VehicleVideo } from '@/components/common/VehicleVideo'
@@ -223,6 +224,7 @@ function BookingDetail({ booking, mode }: { booking: Booking; mode: Role }) {
             ) : null}
           </div>
         ) : null}
+        {(mode === 'admin' || mode === 'partner') ? <BookingRenterDocuments booking={booking} /> : null}
       </div>
       <div>
         <p className="font-bold">History</p>
