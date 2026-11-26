@@ -308,7 +308,7 @@ function seedSmsTemplates(): SmsTemplate[] {
 
 function seedSettings() {
   return {
-    holdPendingBookings: true,
+    holdPendingBookings: false,
     companyCommissionRate: 0,
     defaultPartnerShare: 70,
     defaultDriverPackage: { insidePerDay: 1000, outsideFirstDay: 3000, outsideSucceeding: 1000 },

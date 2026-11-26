@@ -1555,7 +1555,14 @@ export function SettingsBoard() {
     <div className="grid gap-4 lg:grid-cols-2">
       <Panel>
         <h1 className="text-xl font-extrabold">Settings</h1>
-        <label className="mt-3 flex items-center gap-2 text-sm"><input type="checkbox" checked={data.settings.holdPendingBookings} onChange={(event) => actions.saveSettings({ holdPendingBookings: event.target.checked })} /> Pending bookings hold the calendar</label>
+        <label className="mt-3 flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={data.settings.holdPendingBookings}
+            onChange={(event) => actions.saveSettings({ holdPendingBookings: event.target.checked })}
+          />
+          Reserve dates while booking is still pending (off = only confirmed bookings block others)
+        </label>
         <label className="mt-3 flex items-center gap-2 text-sm"><input type="checkbox" checked={data.settings.ownersCanBlockAvailability} onChange={(event) => actions.saveSettings({ ownersCanBlockAvailability: event.target.checked })} /> Partners can block unavailable dates</label>
         <div className="mt-4 rounded-2xl border border-line bg-canvas px-3 py-3 text-sm">
           <p className="font-bold text-ink">Partner commission split</p>

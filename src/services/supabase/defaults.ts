@@ -4,7 +4,7 @@ import { COMPANY_COMMISSION_PERCENT, PARTNER_COMMISSION_PERCENT } from '@/utils/
 import { DEFAULT_RENTAL_PACKAGE } from '@/utils/rentalPackage'
 
 export const DEFAULT_SETTINGS: Settings = {
-  holdPendingBookings: true,
+  holdPendingBookings: false,
   companyCommissionRate: COMPANY_COMMISSION_PERCENT,
   defaultPartnerShare: PARTNER_COMMISSION_PERCENT,
   ownersCanBlockAvailability: true,
