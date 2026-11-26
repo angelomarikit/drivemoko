@@ -12,10 +12,8 @@ import type { FuelType, Transmission, Vehicle, VehicleCategory } from '@/types'
 import { isPubliclyBookable } from '@/utils/bookingRules'
 import { formatPeso } from '@/utils/money'
 import {
-  formatRentalPriceRangeCombined,
-  rentalPackageRateBounds,
-  resolveRentalPackage,
-  resolveRentalPackages,
+  formatVehicleListingPriceRange,
+  vehicleListingPriceBounds,
 } from '@/utils/rentalPackage'
 
 const categories: Array<VehicleCategory | 'MPV/Van'> = ['SUV', 'Sedan', 'MPV/Van', 'Pickup', 'Others']
@@ -72,7 +70,7 @@ export function CarsPage() {
         (applied.fuels.length === 0 || applied.fuels.includes(vehicle.fuel)) &&
         (!applied.onlyAvailable || isPubliclyBookable(vehicle)) &&
         (() => {
-          const bounds = rentalPackageRateBounds(resolveRentalPackage(vehicle, data!.settings))
+          const bounds = vehicleListingPriceBounds(vehicle, data!.settings)
           return bounds.max >= applied.priceMin && bounds.min <= applied.priceMax
         })() &&
         text.includes(query.toLowerCase())
@@ -82,15 +80,13 @@ export function CarsPage() {
     if (sort === 'price-asc' && data) {
       sorted.sort(
         (a, b) =>
-          rentalPackageRateBounds(resolveRentalPackage(a, data.settings)).min -
-          rentalPackageRateBounds(resolveRentalPackage(b, data.settings)).min,
+          vehicleListingPriceBounds(a, data.settings).min - vehicleListingPriceBounds(b, data.settings).min,
       )
     }
     if (sort === 'price-desc' && data) {
       sorted.sort(
         (a, b) =>
-          rentalPackageRateBounds(resolveRentalPackage(b, data.settings)).max -
-          rentalPackageRateBounds(resolveRentalPackage(a, data.settings)).max,
+          vehicleListingPriceBounds(b, data.settings).max - vehicleListingPriceBounds(a, data.settings).max,
       )
     }
     if (sort === 'name') sorted.sort((a, b) => a.name.localeCompare(b.name))
@@ -224,7 +220,7 @@ export function CarsPage() {
                       <p className="mt-1 text-xs text-muted">{vehicle.seats} Seater · {vehicle.transmission} · {vehicle.fuel}</p>
                       <p className="mt-2 text-lg font-extrabold text-[#f59e0b]">
                         {data
-                          ? formatRentalPriceRangeCombined(resolveRentalPackages(vehicle, data.settings), formatPeso)
+                          ? formatVehicleListingPriceRange(vehicle, data.settings, formatPeso)
                           : formatPeso(vehicle.pricePerDay)}{' '}
                         <span className="text-xs font-semibold text-muted">/ day</span>
                       </p>

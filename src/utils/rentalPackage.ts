@@ -89,7 +89,33 @@ export function formatRentalPriceRange(pkg: RentalPackage, format: (amount: numb
   return `${format(min)} - ${format(max)}`
 }
 
-/** Smallest–largest rate across inside and outside packages (listing cards). */
+/**
+ * Min/max for cards and filters: this vehicle's outside tiers plus inside tiers only when
+ * the vehicle has an inside override (not the site-wide inside default).
+ */
+export function vehicleListingPriceBounds(vehicle: Vehicle, settings: Settings): { min: number; max: number } {
+  const packages: RentalPackage[] = [resolveRentalPackage(vehicle, settings, 'outside')]
+  if (vehicle.rentalPackageInside) packages.push(vehicle.rentalPackageInside)
+  const rates = packages.flatMap((pkg) => [
+    pkg.rateFirstDay,
+    pkg.rateSucceeding,
+    pkg.rate10Days,
+    pkg.rate15Plus,
+  ])
+  return { min: Math.min(...rates), max: Math.max(...rates) }
+}
+
+export function formatVehicleListingPriceRange(
+  vehicle: Vehicle,
+  settings: Settings,
+  format: (amount: number) => string,
+): string {
+  const { min, max } = vehicleListingPriceBounds(vehicle, settings)
+  if (min === max) return format(min)
+  return `${format(min)} - ${format(max)}`
+}
+
+/** @deprecated Use formatVehicleListingPriceRange — site inside default skewed listing mins. */
 export function formatRentalPriceRangeCombined(
   packages: RentalPackagesByZone,
   format: (amount: number) => string,

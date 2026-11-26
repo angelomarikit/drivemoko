@@ -24,7 +24,7 @@ import { buildPickupLocation, type FulfillmentMode } from '@/constants/pickup'
 import { type DriverServiceZone } from '@/utils/driverPackage'
 import { emptyAddons, quotePackage } from '@/utils/pricing'
 import {
-  formatRentalPriceRangeCombined,
+  formatVehicleListingPriceRange,
   resolveRentalPackage,
   resolveRentalPackages,
 } from '@/utils/rentalPackage'
@@ -163,9 +163,9 @@ export function VehicleDetailPage() {
                 <button type="button" className="grid h-9 w-9 place-items-center rounded-full border" onClick={() => actions.favorite(vehicle.id)} aria-label="Favorite"><Heart className={`h-4 w-4 ${loved ? 'fill-rose-500 text-rose-500' : ''}`} /></button>
               </div>
             </div>
-            {rentalPackages ? (
+            {rentalPackages && data ? (
               <p className="mt-3 text-2xl font-extrabold text-[#f59e0b]">
-                {formatRentalPriceRangeCombined(rentalPackages, formatPeso)}{' '}
+                {formatVehicleListingPriceRange(vehicle, data.settings, formatPeso)}{' '}
                 <span className="text-sm font-semibold text-muted">/ day</span>
               </p>
             ) : null}
@@ -244,8 +244,8 @@ export function VehicleDetailPage() {
             <h3 className="font-bold">About This Vehicle</h3>
             <p className="mt-2 text-muted">
               {vehicle.description}
-              {rentalPackages
-                ? ` Rates from ${formatRentalPriceRangeCombined(rentalPackages, formatPeso)} per day.`
+              {rentalPackages && data
+                ? ` Rates from ${formatVehicleListingPriceRange(vehicle, data.settings, formatPeso)} per day.`
                 : ''}{' '}
               Plate {vehicle.plateNumber}.
             </p>
