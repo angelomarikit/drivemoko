@@ -627,9 +627,12 @@ export function CalendarBoard({ mode }: { mode: Role }) {
   if (partnerId !== 'all') vehicles = vehicles.filter((vehicle) => vehicle.partnerId === partnerId)
   const vehicleIds = new Set(vehicles.map((vehicle) => vehicle.id))
   bookings = bookings.filter((booking) => vehicleIds.has(booking.vehicleId))
+  const scheduleBookings = bookings.filter((booking) =>
+    booking.status === 'confirmed' || booking.status === 'ongoing' || booking.status === 'completed',
+  )
   const bookableVehicles = vehicles.filter((vehicle) => isPubliclyBookable(vehicle))
   const vehicleName = (id: string) => data.vehicles.find((vehicle) => vehicle.id === id)?.name ?? 'Vehicle'
-  const events = bookings.map((booking) => ({
+  const events = scheduleBookings.map((booking) => ({
     id: booking.id,
     title: `${booking.reference} · ${vehicleName(booking.vehicleId)}`,
     start: booking.pickupDate,
@@ -669,13 +672,15 @@ export function CalendarBoard({ mode }: { mode: Role }) {
     navigate(`/book/${bookDraft.vehicleId}?${params.toString()}`)
   }
 
-  const opened = bookings.find((booking) => booking.id === openId) ?? null
+  const opened = scheduleBookings.find((booking) => booking.id === openId) ?? null
 
   return (
     <Panel className="p-0 overflow-hidden">
       <div className="flex flex-wrap items-center gap-2 border-b border-line px-4 py-3">
         <h1 className="text-lg font-bold text-ink">Calendar</h1>
-        <p className="w-full text-xs text-slate-600 sm:w-auto sm:flex-1">Drag on empty days to pick rental dates — same flow as the public booking form.</p>
+        <p className="w-full text-xs text-slate-600 sm:w-auto sm:flex-1">
+          Shows confirmed, ongoing, and completed rentals only. Pending requests stay under Bookings until approved.
+        </p>
         <Button variant="navy" className="shrink-0" onClick={() => startBookFlow(manilaYmd(), addDays(manilaYmd(), 2))}>
           Book rental
         </Button>
@@ -741,7 +746,7 @@ export function CalendarBoard({ mode }: { mode: Role }) {
             startBookFlow(info.dateStr, info.dateStr)
           }}
           eventClick={(info) => {
-            if (bookings.some((booking) => booking.id === info.event.id)) setOpenId(info.event.id)
+            if (scheduleBookings.some((booking) => booking.id === info.event.id)) setOpenId(info.event.id)
           }}
         />
       </div>
@@ -776,7 +781,7 @@ export function CalendarBoard({ mode }: { mode: Role }) {
                 ))}
               </SelectInput>
             </label>
-            <p className="text-xs text-muted">Pending requests appear on the calendar once submitted.</p>
+            <p className="text-xs text-muted">Approved rentals appear on the calendar after you confirm the booking in Bookings.</p>
             <p className="text-xs text-muted">Pickup and return times default to 08:00 and 18:00 on the booking form.</p>
             <div className="flex flex-wrap gap-2 pt-2">
               <Button onClick={continueCustomerBooking}>Continue to booking</Button>
