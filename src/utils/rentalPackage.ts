@@ -60,10 +60,20 @@ export function resolvePartnerDashboardPackage(partner: User, vehicles: Vehicle[
   return settings.defaultRentalPackage ?? DEFAULT_RENTAL_PACKAGE
 }
 
+/**
+ * When rental length hits 10+ or 15+ days, that tier applies to every day of the trip
+ * (same rule shown on the public rental package card).
+ */
+export function rentalPackageTierRate(pkg: RentalPackage, totalDays: number): number | null {
+  if (totalDays >= 15) return pkg.rate15Plus
+  if (totalDays >= 10) return pkg.rate10Days
+  return null
+}
+
 /** Per-day rate for day index (1-based) given total rental length. */
 export function packageDailyRate(pkg: RentalPackage, dayIndex: number, totalDays: number): number {
-  if (totalDays >= 15 && dayIndex >= 15) return pkg.rate15Plus
-  if (totalDays >= 10 && dayIndex >= 10) return pkg.rate10Days
+  const tierRate = rentalPackageTierRate(pkg, totalDays)
+  if (tierRate != null) return tierRate
   if (dayIndex === 1) return pkg.rateFirstDay
   return pkg.rateSucceeding
 }

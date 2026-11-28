@@ -450,8 +450,8 @@ function VehicleDialog({ vehicle, onClose, mode }: { vehicle: Vehicle | 'new' | 
             </p>
             <label><FieldLabel>1 day</FieldLabel><TextInput type="number" {...form.register('rateFirstDay')} /></label>
             <label><FieldLabel>Succeeding days</FieldLabel><TextInput type="number" {...form.register('rateSucceeding')} /></label>
-            <label><FieldLabel>10+ days (from day 10)</FieldLabel><TextInput type="number" {...form.register('rate10Days')} /></label>
-            <label><FieldLabel>15+ days (from day 15)</FieldLabel><TextInput type="number" {...form.register('rate15Plus')} /></label>
+            <label><FieldLabel>10+ days (entire rental)</FieldLabel><TextInput type="number" {...form.register('rate10Days')} /></label>
+            <label><FieldLabel>15+ days (entire rental)</FieldLabel><TextInput type="number" {...form.register('rate15Plus')} /></label>
             <div className="md:col-span-2">
               <RentalPackageRates
                 package={{

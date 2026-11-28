@@ -47,11 +47,11 @@ export function RentalPackageEditor({
           <TextInput type="number" value={value.rateSucceeding} onChange={(e) => set('rateSucceeding', e.target.value)} />
         </label>
         <label>
-          <FieldLabel>10+ days (from day 10)</FieldLabel>
+          <FieldLabel>10+ days (entire rental)</FieldLabel>
           <TextInput type="number" value={value.rate10Days} onChange={(e) => set('rate10Days', e.target.value)} />
         </label>
         <label>
-          <FieldLabel>15+ days (from day 15)</FieldLabel>
+          <FieldLabel>15+ days (entire rental)</FieldLabel>
           <TextInput type="number" value={value.rate15Plus} onChange={(e) => set('rate15Plus', e.target.value)} />
         </label>
       </div>
@@ -107,11 +107,11 @@ export function RentalPackagesByZoneEditor({
           <TextInput type="number" value={pkg.rateSucceeding} onChange={(e) => set('rateSucceeding', e.target.value)} />
         </label>
         <label>
-          <FieldLabel>10+ days (from day 10)</FieldLabel>
+          <FieldLabel>10+ days (entire rental)</FieldLabel>
           <TextInput type="number" value={pkg.rate10Days} onChange={(e) => set('rate10Days', e.target.value)} />
         </label>
         <label>
-          <FieldLabel>15+ days (from day 15)</FieldLabel>
+          <FieldLabel>15+ days (entire rental)</FieldLabel>
           <TextInput type="number" value={pkg.rate15Plus} onChange={(e) => set('rate15Plus', e.target.value)} />
         </label>
       </div>
